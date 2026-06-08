@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    /* iOS: kein blauer Tap-Highlight, ruhigeres Touch-Feeling */
+    -webkit-tap-highlight-color: transparent;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Zahlen-Eingaben ohne Spinner (mobile-first) */
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type='number'] {
+    -moz-appearance: textfield;
+  }
+
+  /* Fokus-Ring im Markenblau */
+  :focus-visible {
+    outline: 2px solid theme('colors.accent.DEFAULT');
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* Karten-Grundform */
+  .card {
+    @apply rounded-2xl border border-line bg-surface shadow-card;
+  }
+
+  /* Große Performance-Zahl */
+  .stat-number {
+    @apply font-display font-semibold tabular-nums tracking-tight text-foreground;
+  }
+}
+
+@layer utilities {
+  /* Safe-Area-Insets für PWA (iPhone Notch / Home-Indicator) */
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
+  }
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .min-h-dvh {
+    min-height: 100dvh;
+  }
+
+  /* Scrollleiste ausblenden (z. B. horizontale Reiter) – Wischen/Scrollen bleibt aktiv */
+  .no-scrollbar {
+    -ms-overflow-style: none; /* alte Edge/IE */
+    scrollbar-width: none; /* Firefox */
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none; /* Safari/Chrome/WebKit */
+  }
+}
