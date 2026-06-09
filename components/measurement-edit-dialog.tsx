@@ -3,7 +3,9 @@
 import { useEffect, useState } from 'react';
 import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
+import { Segmented } from '@/components/ui/segmented';
 import { getSupabaseClient } from '@/lib/supabase/client';
+import { supportsSide, type Side } from '@/lib/laterality';
 import { formatNumber, formatValue } from '@/lib/format';
 import {
   REPS_MAX,
@@ -46,6 +48,7 @@ export function MeasurementEditDialog({
   const [valueStr, setValueStr] = useState('');
   const [weightStr, setWeightStr] = useState('');
   const [repsStr, setRepsStr] = useState('1');
+  const [side, setSide] = useState<'' | Side>('');
   const [date, setDate] = useState('');
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
@@ -54,6 +57,8 @@ export function MeasurementEditDialog({
   const [error, setError] = useState<string | null>(null);
 
   const is1rm = !!metric && supportsOneRepMax(metric);
+  // Links/Rechts nur bei Richtungswechsel-Tests mit Drehung.
+  const hasSide = supportsSide(metric);
 
   // Beim Öffnen die Felder aus dem Messwert vorbelegen.
   useEffect(() => {
@@ -65,6 +70,7 @@ export function MeasurementEditDialog({
       String(measurement.weight ?? measurement.value).replace('.', ','),
     );
     setRepsStr(String(measurement.reps ?? 1));
+    setSide(measurement.side ?? '');
     setDate(measurement.tested_at.slice(0, 10));
     setNote(measurement.note ?? '');
     setSaving(false);
@@ -124,6 +130,8 @@ export function MeasurementEditDialog({
       .update({
         value,
         ...(is1rm ? { reps, weight } : {}),
+        // Seite nur bei Richtungswechsel-Tests; '' (ohne) wird zu null.
+        ...(hasSide ? { side: side || null } : {}),
         tested_at: date,
         note: note.trim() || null,
       })
@@ -229,6 +237,21 @@ export function MeasurementEditDialog({
               value={valueStr}
               onChange={(e) => setValueStr(e.target.value)}
               className={FIELD}
+            />
+          </div>
+        )}
+
+        {hasSide && (
+          <div className="flex flex-col gap-1.5">
+            <span className={LABEL}>Seite</span>
+            <Segmented
+              options={[
+                { key: 'left', label: 'Links' },
+                { key: 'right', label: 'Rechts' },
+                { key: '', label: 'ohne' },
+              ]}
+              value={side}
+              onChange={setSide}
             />
           </div>
         )}

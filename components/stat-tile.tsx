@@ -1,10 +1,11 @@
 'use client';
 
 import { clsx } from '@/lib/clsx';
-import { formatDelta, formatValue } from '@/lib/format';
+import { formatDate, formatValue } from '@/lib/format';
 import type { MetricStat } from '@/lib/metrics';
 
-/** Kachel mit aktuellem Wert, PB-Markierung und Veränderung zum Vorwert. */
+/** Kachel mit dem Bestwert (PB) der Metrik im gewählten Zeitfenster + Datum.
+ *  Das Zeitfenster steuert der Schalter über dem Kachel-Raster. */
 export function StatTile({
   stat,
   selected,
@@ -14,7 +15,7 @@ export function StatTile({
   selected?: boolean;
   onClick?: () => void;
 }) {
-  const { metric, latest, delta, improved, latestIsBest, count } = stat;
+  const { metric, best, count } = stat;
   const unit = metric.unit;
 
   return (
@@ -28,7 +29,7 @@ export function StatTile({
     >
       <div className="flex items-start justify-between gap-2">
         <span className="text-xs font-medium text-foreground-muted">{metric.label}</span>
-        {latestIsBest && count > 0 && (
+        {best && count > 0 && (
           <span className="rounded-md bg-accent-soft px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
             PB
           </span>
@@ -36,24 +37,14 @@ export function StatTile({
       </div>
 
       <div className="stat-number text-3xl leading-none">
-        {latest ? formatValue(latest.value, unit) : '–'}
+        {best ? formatValue(best.value, unit) : '–'}
       </div>
 
       <div className="text-xs">
-        {delta != null ? (
-          <span
-            className={clsx(
-              'inline-flex items-center gap-1 font-medium',
-              improved ? 'text-success' : delta === 0 ? 'text-foreground-muted' : 'text-danger',
-            )}
-          >
-            <span aria-hidden>{improved ? '↑' : delta === 0 ? '→' : '↓'}</span>
-            {formatDelta(delta, unit)}
-          </span>
-        ) : count === 1 ? (
-          <span className="text-foreground-subtle">Erster Wert</span>
+        {best ? (
+          <span className="text-foreground-subtle">{formatDate(best.tested_at)}</span>
         ) : (
-          <span className="text-foreground-subtle">Noch kein Wert</span>
+          <span className="text-foreground-subtle">Kein Wert</span>
         )}
       </div>
     </button>

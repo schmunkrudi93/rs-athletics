@@ -3,9 +3,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
+import { Segmented } from '@/components/ui/segmented';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { isBetter, sortMetrics } from '@/lib/metrics';
 import { isRsaMetric } from '@/lib/rsa';
+import { supportsSide, type Side } from '@/lib/laterality';
 import { formatDate, formatDelta, formatNumber, formatValue } from '@/lib/format';
 import {
   REPS_MAX,
@@ -62,6 +64,7 @@ export function MeasurementDialog({
   const [valueStr, setValueStr] = useState('');
   const [weightStr, setWeightStr] = useState('');
   const [repsStr, setRepsStr] = useState('1');
+  const [side, setSide] = useState<'' | Side>('');
   const [date, setDate] = useState(todayInput());
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
@@ -82,6 +85,7 @@ export function MeasurementDialog({
     setValueStr('');
     setWeightStr('');
     setRepsStr('1');
+    setSide('');
     setNote('');
     setDate(todayInput());
     setError(null);
@@ -103,6 +107,8 @@ export function MeasurementDialog({
 
   // 1RM-Rechner nur für Kraftübungen mit kg-Last. Live-Schätzung aus den Feldern.
   const is1rm = !!metric && supportsOneRepMax(metric);
+  // Links/Rechts nur bei Richtungswechsel-Tests mit Drehung.
+  const hasSide = supportsSide(metric);
   const weightNum = Number(weightStr.replace(',', '.'));
   const repsNum = Number(repsStr.replace(',', '.'));
   const est1rm = is1rm ? estimateOneRepMax(weightNum, repsNum) : NaN;
@@ -181,6 +187,8 @@ export function MeasurementDialog({
       // reps/weight nur bei 1RM-Übungen mitschreiben – sonst bleibt der Insert
       // frei von den neuen Spalten (kein Migrations-Zwang für alte Tests).
       ...(is1rm ? { reps, weight } : {}),
+      // Seite nur bei Richtungswechsel-Tests und nur, wenn gewählt.
+      ...(hasSide && side ? { side } : {}),
       tested_at: date, // DATE-Spalte: der gewählte Tag (YYYY-MM-DD), zeitzonensicher
       entered_by: enteredBy,
       note: note.trim() || null,
@@ -316,6 +324,21 @@ export function MeasurementDialog({
               onChange={(e) => setValueStr(e.target.value)}
               placeholder={metric?.unit === 's' ? 'z. B. 1,81' : 'z. B. 245'}
               className={FIELD}
+            />
+          </div>
+        )}
+
+        {hasSide && (
+          <div className="flex flex-col gap-1.5">
+            <span className={LABEL}>Seite</span>
+            <Segmented
+              options={[
+                { key: 'left', label: 'Links' },
+                { key: 'right', label: 'Rechts' },
+                { key: '', label: 'ohne' },
+              ]}
+              value={side}
+              onChange={setSide}
             />
           </div>
         )}

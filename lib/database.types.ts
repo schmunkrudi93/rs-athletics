@@ -74,6 +74,8 @@ export type Database = {
           value: number;
           reps: number | null;
           weight: number | null;
+          /** Seite bei Richtungswechsel-Tests; null = ohne Seite. */
+          side: 'left' | 'right' | null;
           tested_at: string;
           entered_by: string;
           note: string | null;
@@ -86,6 +88,7 @@ export type Database = {
           value: number;
           reps?: number | null;
           weight?: number | null;
+          side?: 'left' | 'right' | null;
           tested_at?: string;
           entered_by?: string;
           note?: string | null;

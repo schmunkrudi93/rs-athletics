@@ -53,6 +53,7 @@ create table if not exists public.measurements (
   value       numeric not null,                     -- bei 1RM-Übungen das berechnete 1RM
   reps        int,                                  -- nur 1RM: Wiederholungen der Eingabe
   weight      numeric,                              -- nur 1RM: Last der Eingabe (kg)
+  side        text check (side is null or side in ('left', 'right')),  -- nur Richtungswechsel: Seite
   tested_at   date not null default current_date,  -- Testdatum, editierbar
   entered_by  text not null default 'athlete',     -- 'athlete' | 'coach'
   note        text,
@@ -65,6 +66,10 @@ create index if not exists measurements_athlete_metric_date_idx
 -- Nachrüstung für bestehende DBs: 1RM-Herleitung (Last × Wdh.) ergänzen (idempotent).
 alter table public.measurements add column if not exists reps int;
 alter table public.measurements add column if not exists weight numeric;
+
+-- Nachrüstung: Seite (links/rechts) für Richtungswechsel-Tests (5-0-5, 5-10-5, 90°, 180°).
+alter table public.measurements add column if not exists side text
+  check (side is null or side in ('left', 'right'));
 
 -- PROFILES: verknüpft Supabase-Auth-User -> Athlet und hält die Rolle.
 -- Coach: athlete_id IS NULL, role = 'coach'.

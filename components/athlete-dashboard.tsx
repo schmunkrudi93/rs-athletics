@@ -29,8 +29,14 @@ import {
   sortMetrics,
   type Range,
 } from '@/lib/metrics';
-import { ageLabel, formatDate, formatValue, initials } from '@/lib/format';
+import { ageLabel, formatDate, formatPercent, formatValue, initials } from '@/lib/format';
 import { oneRepMaxBreakdown } from '@/lib/one-rep-max';
+import {
+  asymmetrySeverity,
+  computeSideComparison,
+  supportsSide,
+  type SideComparison,
+} from '@/lib/laterality';
 import type { AthleteRow, MeasurementRow, MetricRow } from '@/lib/database.types';
 
 const TrendChart = dynamic(() => import('@/components/trend-chart').then((m) => m.TrendChart), {
@@ -87,6 +93,9 @@ export function AthleteDashboard({
   const [category, setCategory] = useState<MetricCategory>(VISIBLE_CATEGORIES[0]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [range, setRange] = useState<Range>('3M');
+  // Zeitfenster der oberen Kacheln (Bestwert je Metrik im Fenster). Eigener
+  // Schalter, unabhängig vom Verlaufs-Graph unten. Default: Alle = All-Time-PB.
+  const [tileRange, setTileRange] = useState<Range>('all');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<MeasurementRow | null>(null);
   const [celebration, setCelebration] = useState<string | null>(null);
@@ -149,9 +158,13 @@ export function AthleteDashboard({
   );
   // RSA-Tests der aktuellen Kategorie (eigene Kachel + Detailansicht).
   const rsaMetrics = useMemo(() => categoryMetrics.filter(isRsaMetric), [categoryMetrics]);
+  // Kachel-Kennzahlen je Metrik im gewählten Zeitfenster (Bestwert = PB im Fenster).
   const stats = useMemo(
-    () => tileMetrics.map((m) => computeStat(m, dailyByMetric.get(m.id) ?? [])),
-    [tileMetrics, dailyByMetric],
+    () =>
+      tileMetrics.map((m) =>
+        computeStat(m, filterByRange(dailyByMetric.get(m.id) ?? [], tileRange)),
+      ),
+    [tileMetrics, dailyByMetric, tileRange],
   );
   // Games-Speed-/Richtungswechsel-Defizit (nur im cod-Reiter, wenn Referenz + Cut da sind).
   const deficitReport = useMemo(
@@ -417,6 +430,21 @@ export function AthleteDashboard({
               <SkeletonTiles />
             ) : (
               <>
+                {/* Zeitfenster-Schalter für die Bestwert-Kacheln (wie beim Graphen). */}
+                {stats.length > 0 && (
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">
+                      Bestwerte
+                    </span>
+                    <Segmented
+                      size="sm"
+                      options={RANGES.map((r) => ({ key: r.key, label: r.label }))}
+                      value={tileRange}
+                      onChange={setTileRange}
+                    />
+                  </div>
+                )}
+
                 {/* Kacheln (normale Tests + RSA-Kacheln mit Fatigue %) */}
                 <section className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                   {stats.map((s) => (
@@ -540,6 +568,11 @@ function MetricDetailSection({
   );
   const series = useMemo(() => filterByRange(seriesAll, range), [seriesAll, range]);
   const historyDesc = useMemo(() => [...seriesAll].reverse(), [seriesAll]);
+  // Links/Rechts-Vergleich aus den Roh-Werten (nur Richtungswechsel-Tests mit Seite).
+  const sideComparison = useMemo(
+    () => (supportsSide(metric) ? computeSideComparison(rawRows, metric.higher_is_better) : null),
+    [metric, rawRows],
+  );
   // Roh-Versuche je Kalendertag (chronologisch) – fürs Aufklappen einer Tageszeile.
   const rawByDay = useMemo(() => {
     const map = new Map<string, MeasurementRow[]>();
@@ -573,6 +606,10 @@ function MetricDetailSection({
         />
       </div>
 
+      {sideComparison && (sideComparison.left || sideComparison.right) && (
+        <SideComparisonBlock comparison={sideComparison} unit={metric.unit} />
+      )}
+
       {seriesAll.length === 0 ? (
         <EmptyMetric onAdd={enableEntry ? onAdd : undefined} />
       ) : series.length === 0 ? (
@@ -604,6 +641,56 @@ function MetricDetailSection({
         </div>
       )}
     </section>
+  );
+}
+
+/** Links/Rechts-Bestwerte einer Metrik + relative Differenz. Ampel auf der
+ *  Differenz: > 10 % rot, > 5 % gelb, sonst neutral. Steht im Detail direkt
+ *  unter dem Metrik-Kopf (also „unter der Bestzeit"). */
+function SideComparisonBlock({
+  comparison,
+  unit,
+}: {
+  comparison: SideComparison;
+  unit: string;
+}) {
+  const { left, right, pctDiff } = comparison;
+  const severity = asymmetrySeverity(pctDiff);
+  const diffColor =
+    severity === 'high'
+      ? 'text-danger'
+      : severity === 'warn'
+        ? 'text-warning'
+        : 'text-foreground';
+  return (
+    <div className="flex items-end justify-between gap-3 rounded-xl border border-line bg-surface-muted/40 px-3 py-2.5">
+      <div className="flex gap-5">
+        <div className="flex flex-col">
+          <span className="text-[11px] font-medium uppercase tracking-wide text-foreground-subtle">
+            Links
+          </span>
+          <span className="stat-number text-lg">{left ? formatValue(left.value, unit) : '–'}</span>
+        </div>
+        <div className="flex flex-col">
+          <span className="text-[11px] font-medium uppercase tracking-wide text-foreground-subtle">
+            Rechts
+          </span>
+          <span className="stat-number text-lg">
+            {right ? formatValue(right.value, unit) : '–'}
+          </span>
+        </div>
+      </div>
+      {pctDiff != null && (
+        <div className="flex flex-col items-end">
+          <span className="text-[11px] font-medium uppercase tracking-wide text-foreground-subtle">
+            Differenz
+          </span>
+          <span className={clsx('stat-number text-lg font-semibold', diffColor)}>
+            {formatPercent(pctDiff)}
+          </span>
+        </div>
+      )}
+    </div>
   );
 }
 
