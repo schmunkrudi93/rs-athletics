@@ -4,7 +4,7 @@
  *  - statische Assets: stale-while-revalidate
  *  - /api/* wird NIE gecacht
  */
-const CACHE = 'rs-athletics-v1';
+const CACHE = 'rs-athletics-v2';
 const APP_SHELL = '/';
 
 self.addEventListener('install', () => {
