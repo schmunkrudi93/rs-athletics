@@ -2,6 +2,7 @@
 
 import { clsx } from '@/lib/clsx';
 import { formatDate, formatValue } from '@/lib/format';
+import { oneRepMaxBreakdown } from '@/lib/one-rep-max';
 import type { MetricStat } from '@/lib/metrics';
 
 /** Kachel mit dem Bestwert (PB) der Metrik im gewählten Zeitfenster + Datum.
@@ -17,6 +18,7 @@ export function StatTile({
 }) {
   const { metric, best, count } = stat;
   const unit = metric.unit;
+  const breakdown = best ? oneRepMaxBreakdown(best.reps, best.weight, unit) : null;
 
   return (
     <button
@@ -36,8 +38,13 @@ export function StatTile({
         )}
       </div>
 
-      <div className="stat-number text-3xl leading-none">
-        {best ? formatValue(best.value, unit) : '–'}
+      <div className="flex flex-col">
+        <span className="stat-number text-3xl leading-none">
+          {best ? formatValue(best.value, unit) : '–'}
+        </span>
+        {breakdown && (
+          <span className="mt-1.5 text-[11px] text-foreground-subtle">{breakdown}</span>
+        )}
       </div>
 
       <div className="text-xs">
