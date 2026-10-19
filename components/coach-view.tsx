@@ -63,6 +63,12 @@ export function CoachView() {
           </div>
           <div className="flex gap-2">
             <Link
+              href="/coach/training"
+              className="inline-flex h-9 select-none items-center justify-center gap-2 rounded-xl border border-accent/50 bg-accent-soft px-3 text-sm font-medium text-accent transition hover:border-accent active:scale-[0.98]"
+            >
+              Training
+            </Link>
+            <Link
               href="/coach/metriken"
               className="inline-flex h-9 select-none items-center justify-center gap-2 rounded-xl border border-line bg-surface px-3 text-sm font-medium text-foreground transition hover:border-accent/50 active:scale-[0.98]"
             >

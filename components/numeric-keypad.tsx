@@ -5,13 +5,15 @@ import { clsx } from '@/lib/clsx';
 type NumericKeypadProps = {
   onDigit: (digit: string) => void;
   onDelete: () => void;
+  /** Optional: Komma-Taste unten links (für Dezimalwerte wie 1,82 s). */
+  onDecimal?: () => void;
   disabled?: boolean;
 };
 
 const DIGITS = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
 
 /** Großflächiges Ziffern-Tastenfeld (mobile-first, Airtable-Stil). */
-export function NumericKeypad({ onDigit, onDelete, disabled }: NumericKeypadProps) {
+export function NumericKeypad({ onDigit, onDelete, onDecimal, disabled }: NumericKeypadProps) {
   return (
     <div className="grid grid-cols-3 gap-3">
       {DIGITS.map((d) => (
@@ -19,8 +21,14 @@ export function NumericKeypad({ onDigit, onDelete, disabled }: NumericKeypadProp
           {d}
         </KeypadButton>
       ))}
-      {/* untere Reihe: leer | 0 | löschen */}
-      <span aria-hidden />
+      {/* untere Reihe: Komma (oder leer) | 0 | löschen */}
+      {onDecimal ? (
+        <KeypadButton disabled={disabled} onClick={onDecimal} ariaLabel="Komma">
+          ,
+        </KeypadButton>
+      ) : (
+        <span aria-hidden />
+      )}
       <KeypadButton disabled={disabled} onClick={() => onDigit('0')}>
         0
       </KeypadButton>
