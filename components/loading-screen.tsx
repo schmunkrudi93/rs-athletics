@@ -4,7 +4,7 @@ import { Logo } from '@/components/logo';
 export function LoadingScreen() {
   return (
     <main className="grid min-h-dvh place-items-center px-6">
-      <Logo size={56} showWordmark={false} className="animate-pulse" />
+      <Logo variant="submark" height={64} className="animate-pulse" />
     </main>
   );
 }

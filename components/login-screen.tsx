@@ -110,7 +110,7 @@ export function LoginScreen() {
   if (phase === 'checking' || phase === 'success') {
     return (
       <main className="grid min-h-dvh place-items-center px-6">
-        <Logo size={64} showWordmark={false} className="animate-pulse" />
+        <Logo variant="submark" height={72} className="animate-pulse" />
       </main>
     );
   }
@@ -120,7 +120,7 @@ export function LoginScreen() {
   return (
     <main className="grid min-h-dvh place-items-center px-6 pb-safe pt-safe">
       <div className="flex w-full max-w-xs flex-col items-center gap-8">
-        <Logo size={64} showWordmark showTagline />
+        <Logo variant="stacked" height={132} />
 
         <div className="flex w-full flex-col items-center gap-2">
           <p className="text-sm text-foreground-muted">Code eingeben</p>

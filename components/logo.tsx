@@ -1,46 +1,36 @@
 import { clsx } from '@/lib/clsx';
 
+export type LogoVariant = 'submark' | 'horizontal' | 'primary' | 'stacked';
+
 type LogoProps = {
-  /** Größe des Monogramm-Quadrats in px */
-  size?: number;
-  showWordmark?: boolean;
-  showTagline?: boolean;
+  /** Welche Marke. Default: horizontal („RS | ATHLETICS"). */
+  variant?: LogoVariant;
+  /** Höhe in px; die Breite folgt automatisch dem Seitenverhältnis der Marke. */
+  height?: number;
   className?: string;
 };
 
 /**
- * Marken-Logo als sauberer Platzhalter ("RS ATHLETICS").
- * Sobald ein echtes Logo unter /public/logo.png liegt, kann hier auf
- * ein <img src="/logo.png" /> umgestellt werden — der Rest der App nutzt
- * ausschließlich diese Komponente.
+ * Marken-Logo (RS Athletics) als echtes Vektor-SVG aus /public/brand.
+ * Helle „on-dark"-Variante (weiße Schrift, blaue Speed-Lines) fürs dunkle UI.
+ * Vier Marken:
+ *  - submark:    nur das „RS"-Zeichen mit Speed-Lines (Lade-/Splash-Zustände)
+ *  - horizontal: „RS | ATHLETICS" kompakt, ohne Unterzeilen (Top-Bar)
+ *  - primary:    horizontaler Lockup MIT Unterzeilen
+ *  - stacked:    RS oben, ATHLETICS darunter, mit Unterzeilen (Login-Header)
+ *
+ * Breite = auto, damit ein späterer Re-Export mit anderem viewBox automatisch
+ * passt; `max-w-full` verhindert Überlauf auf schmalen Screens.
  */
-export function Logo({
-  size = 44,
-  showWordmark = true,
-  showTagline = false,
-  className,
-}: LogoProps) {
+export function Logo({ variant = 'horizontal', height = 32, className }: LogoProps) {
   return (
-    <div className={clsx('flex items-center gap-3', className)}>
-      <div
-        aria-hidden
-        className="grid shrink-0 place-items-center rounded-xl bg-gradient-to-br from-accent to-accent-strong font-display font-bold leading-none text-white shadow-card"
-        style={{ width: size, height: size, fontSize: size * 0.42 }}
-      >
-        RS
-      </div>
-      {showWordmark && (
-        <div className="leading-tight">
-          <div className="font-display text-lg font-bold tracking-wide text-foreground">
-            RS ATHLETICS
-          </div>
-          {showTagline && (
-            <div className="text-xs font-medium uppercase tracking-[0.18em] text-foreground-muted">
-              Train Fast. Play Faster.
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+    // eslint-disable-next-line @next/next/no-img-element -- statisches SVG-Logo, keine next/image-Optimierung nötig
+    <img
+      src={`/brand/rs-${variant}.svg`}
+      alt="RS Athletics"
+      style={{ height, width: 'auto' }}
+      className={clsx('block max-w-full select-none', className)}
+      draggable={false}
+    />
   );
 }
