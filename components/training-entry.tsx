@@ -483,13 +483,11 @@ function EntryScreen({
     setNow(savedAt);
     setLastSavedAt((prev) => new Map(prev).set(athlete.id, savedAt));
 
-    // Übung bleibt gewählt (nächster läuft meist dasselbe). Bei mehreren
-    // Teilnehmern wird der Name bewusst zurückgesetzt, damit niemand
-    // versehentlich beim Vorgänger einträgt; ist nur eine Person dabei, bleibt sie.
+    // Name und Übung bleiben gewählt – so lassen sich z. B. Splits (10/20/30 m)
+    // eines Athleten direkt hintereinander eintragen. Gewechselt wird per Antippen.
     setValueStr('');
     setSide('');
-    if (!single) setAthleteId(null);
-  }, [athlete, metric, saving, valueStr, value, hasSide, side, setTodayRows, single]);
+  }, [athlete, metric, saving, valueStr, value, hasSide, side, setTodayRows]);
 
   /** Tippfehler rückgängig machen: Eintrag wieder löschen. */
   async function undo(entry: LogEntry) {
