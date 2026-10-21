@@ -20,11 +20,13 @@ const config: Config = {
           muted: '#1C232C',
         },
         line: '#222A33', // dezente Borders
-        // Blauer Akzent
+        // Blauer Akzent – an das Marken-Blau des Logos angelehnt.
+        // strong = exaktes Logo-Blau (#1C5192, Speed-Lines); DEFAULT etwas heller,
+        // damit Akzent-TEXT auf dem fast schwarzen Grund lesbar bleibt.
         accent: {
-          DEFAULT: '#3B82F6',
-          strong: '#2563EB',
-          soft: 'rgba(59, 130, 246, 0.12)',
+          DEFAULT: '#2F6FC4',
+          strong: '#1C5192',
+          soft: 'rgba(28, 81, 146, 0.18)',
         },
         // Text
         foreground: {

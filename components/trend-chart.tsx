@@ -64,16 +64,16 @@ export function TrendChart({ metric, series }: { metric: MetricRow; series: Meas
           />
           <Tooltip
             content={<ChartTooltip unit={metric.unit} />}
-            cursor={{ stroke: '#3B82F6', strokeWidth: 1 }}
+            cursor={{ stroke: '#2F6FC4', strokeWidth: 1 }}
             trigger={coarsePointer ? 'click' : 'hover'}
           />
           <Line
             type="monotone"
             dataKey="value"
-            stroke="#3B82F6"
+            stroke="#2F6FC4"
             strokeWidth={2}
             dot={renderDot}
-            activeDot={{ r: 6, fill: '#3B82F6', stroke: '#161B22', strokeWidth: 2 }}
+            activeDot={{ r: 6, fill: '#2F6FC4', stroke: '#161B22', strokeWidth: 2 }}
             isAnimationActive={false}
           />
         </LineChart>
@@ -95,10 +95,10 @@ function renderDot({ cx, cy, index, payload }: DotProps) {
   if (cx == null || cy == null) return <g key={key} />;
   if (payload?.hasNote) {
     return (
-      <circle key={key} cx={cx} cy={cy} r={5} fill="#3B82F6" stroke="#161B22" strokeWidth={2} />
+      <circle key={key} cx={cx} cy={cy} r={5} fill="#2F6FC4" stroke="#161B22" strokeWidth={2} />
     );
   }
-  return <circle key={key} cx={cx} cy={cy} r={3} fill="#3B82F6" />;
+  return <circle key={key} cx={cx} cy={cy} r={3} fill="#2F6FC4" />;
 }
 
 type TooltipProps = {
