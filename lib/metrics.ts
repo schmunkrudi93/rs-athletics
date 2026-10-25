@@ -29,7 +29,59 @@ export type MetricStat = {
   improved: boolean | null;
   /** Ist der letzte Wert die persönliche Bestleistung? */
   latestIsBest: boolean;
+  /** Durchschnitt aller Einheiten im gewählten Zeitfenster (null = keine Werte). */
+  average: number | null;
+  /** Gleitender Schnitt der jüngsten Einheiten (unabhängig vom Zeitfenster). */
+  recent: RecentAverage | null;
 };
+
+/** Ergebnis von `recentAverage`. */
+export type RecentAverage = {
+  value: number;
+  /** Anzahl der Einheiten (Trainingstage) im Fenster. */
+  sessions: number;
+  /** Fensterlänge in Wochen (4 … ~17); bei `capped` = 4-Monats-Grenze erreicht. */
+  weeks: number;
+  capped: boolean;
+};
+
+// Parameter des gleitenden Schnitts: Start mit 4 Wochen, so lange wochenweise
+// nach hinten erweitern, bis mindestens 5 Einheiten drin sind – höchstens 4 Monate.
+const RECENT_BASE_WEEKS = 4;
+const RECENT_MIN_SESSIONS = 5;
+const RECENT_MAX_MONTHS = 4;
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+function mean(rows: Pick<MeasurementRow, 'value'>[]): number | null {
+  if (rows.length === 0) return null;
+  return rows.reduce((sum, r) => sum + r.value, 0) / rows.length;
+}
+
+/**
+ * Gleitender Schnitt der letzten 4 Wochen (ab heute). Sind darin weniger als
+ * 5 Einheiten, wird das Fenster wochenweise erweitert, bis 5 erreicht sind –
+ * maximal bis 4 Monate zurück. Eingabe: Tageswerte (`dailyBest`), d. h. ein
+ * Eintrag = eine Einheit. Ohne Einheit in den letzten 4 Monaten → null.
+ */
+export function recentAverage(
+  dailyAsc: Pick<MeasurementRow, 'tested_at' | 'value'>[],
+  now: number = Date.now(),
+): RecentAverage | null {
+  const limitDate = new Date(now);
+  limitDate.setMonth(limitDate.getMonth() - RECENT_MAX_MONTHS);
+  const limit = limitDate.getTime();
+
+  for (let weeks = RECENT_BASE_WEEKS; ; weeks++) {
+    const cutoff = now - weeks * WEEK_MS;
+    const capped = cutoff <= limit;
+    const from = capped ? limit : cutoff;
+    const rows = dailyAsc.filter((m) => new Date(m.tested_at).getTime() >= from);
+    if (rows.length >= RECENT_MIN_SESSIONS || capped) {
+      const value = mean(rows);
+      return value === null ? null : { value, sessions: rows.length, weeks, capped };
+    }
+  }
+}
 
 /** Messwerte nach metric_id gruppieren, je Gruppe aufsteigend nach Datum. */
 export function groupByMetric(measurements: MeasurementRow[]): Map<string, MeasurementRow[]> {
@@ -108,8 +160,13 @@ function bestOf(sortedAsc: MeasurementRow[], higherIsBetter: boolean): Measureme
   return best;
 }
 
-/** Kennzahlen für eine Metrik berechnen. `sortedAsc` = aufsteigend nach Datum. */
-export function computeStat(metric: MetricRow, sortedAsc: MeasurementRow[]): MetricStat {
+/** Kennzahlen für eine Metrik berechnen. `sortedAsc` = aufsteigend nach Datum.
+ *  `recent` wird separat (auf der vollen Historie) berechnet und nur durchgereicht. */
+export function computeStat(
+  metric: MetricRow,
+  sortedAsc: MeasurementRow[],
+  recent: RecentAverage | null = null,
+): MetricStat {
   const count = sortedAsc.length;
   const latest = count > 0 ? sortedAsc[count - 1] : null;
   const previous = count > 1 ? sortedAsc[count - 2] : null;
@@ -120,7 +177,18 @@ export function computeStat(metric: MetricRow, sortedAsc: MeasurementRow[]): Met
     latest && previous ? isBetter(latest.value, previous.value, metric.higher_is_better) : null;
   const latestIsBest = !!latest && !!best && latest.id === best.id;
 
-  return { metric, count, latest, previous, best, delta, improved, latestIsBest };
+  return {
+    metric,
+    count,
+    latest,
+    previous,
+    best,
+    delta,
+    improved,
+    latestIsBest,
+    average: mean(sortedAsc),
+    recent,
+  };
 }
 
 /** Messreihe auf ein Zeitfenster eingrenzen (Eingabe aufsteigend sortiert). */

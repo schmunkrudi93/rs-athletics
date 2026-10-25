@@ -10,7 +10,13 @@ import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
 import { useRequireRole } from '@/lib/hooks/use-require-role';
 import { getSupabaseClient } from '@/lib/supabase/client';
-import { isBetter, sortMetrics } from '@/lib/metrics';
+import {
+  dayKey,
+  isBetter,
+  recentAverage,
+  sortMetrics,
+  type RecentAverage,
+} from '@/lib/metrics';
 import { supportsSide, SIDE_LABELS, type Side } from '@/lib/laterality';
 import { formatDelta, formatValue, initials, todayISO } from '@/lib/format';
 import { clsx } from '@/lib/clsx';
@@ -65,6 +71,9 @@ function formatDuration(ms: number): string {
 
 /** Heutiger Roh-Eintrag (für „Heute bisher" in der Namensliste). */
 type TodayRow = { id: string; athlete_id: string; metric_id: string; value: number };
+
+/** Historischer Eintrag (mit Datum – für den gleitenden 4-Wochen-Schnitt). */
+type HistoryRow = TodayRow & { tested_at: string };
 
 /** Eintrag im Protokoll dieser Sitzung (neueste zuerst). */
 type LogEntry = {
@@ -294,7 +303,7 @@ function EntryScreen({
   // Feuerwerk bei Bestleistung; `id` erzwingt ein frisches Overlay pro PB.
   const [celebration, setCelebration] = useState<{ id: string; detail: string } | null>(null);
   // Alle bisherigen Werte der Teilnehmer (nur Trainings-Übungen) – Basis der PB-Anzeige.
-  const [historyRows, setHistoryRows] = useState<TodayRow[]>([]);
+  const [historyRows, setHistoryRows] = useState<HistoryRow[]>([]);
   // Pausen-Uhr: Zeitpunkt des letzten Speicherns je Athlet (zählt hoch).
   const [lastSavedAt, setLastSavedAt] = useState<Map<string, number>>(() => new Map());
   const [now, setNow] = useState(() => Date.now());
@@ -313,12 +322,12 @@ function EntryScreen({
     let active = true;
     void (async () => {
       const supabase = getSupabaseClient();
-      const rows: TodayRow[] = [];
+      const rows: HistoryRow[] = [];
       const PAGE = 1000;
       for (let from = 0; ; from += PAGE) {
         const { data, error: histErr } = await supabase
           .from('measurements')
-          .select('id, athlete_id, metric_id, value')
+          .select('id, athlete_id, metric_id, value, tested_at')
           .in('athlete_id', ids)
           .in('metric_id', metricIds)
           .order('id')
@@ -347,6 +356,30 @@ function EntryScreen({
       if (cur === undefined || isBetter(r.value, cur, hib.get(r.metric_id) ?? false)) {
         map.set(key, r.value);
       }
+    }
+    return map;
+  }, [historyRows, metrics]);
+
+  /** Gleitender Schnitt (mind. 4 Wochen / 5 Einheiten, max. 4 Monate) je Athlet+Übung.
+   *  Wie im Dashboard zählt pro Tag nur der Tagesbestwert als eine Einheit. */
+  const recentByKey = useMemo(() => {
+    const hib = new Map(metrics.map((m) => [m.id, m.higher_is_better]));
+    const days = new Map<string, Map<string, number>>(); // key -> (Tag -> Tagesbestwert)
+    for (const r of historyRows) {
+      const key = `${r.athlete_id}:${r.metric_id}`;
+      let perDay = days.get(key);
+      if (!perDay) days.set(key, (perDay = new Map()));
+      const day = dayKey(r.tested_at);
+      const cur = perDay.get(day);
+      if (cur === undefined || isBetter(r.value, cur, hib.get(r.metric_id) ?? false)) {
+        perDay.set(day, r.value);
+      }
+    }
+    const map = new Map<string, RecentAverage>();
+    for (const [key, perDay] of days) {
+      const rows = [...perDay].map(([tested_at, value]) => ({ tested_at, value }));
+      const recent = recentAverage(rows);
+      if (recent) map.set(key, recent);
     }
     return map;
   }, [historyRows, metrics]);
@@ -477,7 +510,7 @@ function EntryScreen({
     }
     const row = { id: inserted.id, athlete_id: athlete.id, metric_id: metric.id, value };
     setTodayRows((prev) => [...prev, row]);
-    setHistoryRows((prev) => [...prev, row]);
+    setHistoryRows((prev) => [...prev, { ...row, tested_at: todayISO() }]);
     // Pausen-Uhr für diesen Athleten (neu) starten.
     const savedAt = Date.now();
     setNow(savedAt);
@@ -507,6 +540,8 @@ function EntryScreen({
   const athletePause = athlete ? pauseFor(athlete.id) : null;
   const currentBest = athlete && metric ? bestByKey.get(`${athlete.id}:${metric.id}`) : undefined;
   const currentToday = athlete ? todayBestByAthlete.get(athlete.id) : undefined;
+  const currentRecent =
+    athlete && metric ? recentByKey.get(`${athlete.id}:${metric.id}`) : undefined;
 
   // Hardware-Tastatur (z. B. am iPad-Keyboard) zusätzlich unterstützen.
   useEffect(() => {
@@ -685,6 +720,15 @@ function EntryScreen({
                   <span className="font-semibold text-foreground">
                     {currentBest !== undefined ? formatValue(currentBest, metric.unit) : '–'}
                   </span>
+                  {currentRecent && (
+                    <>
+                      {' · '}
+                      {currentRecent.capped ? 'Ø 4 Mon' : `Ø ${currentRecent.weeks} Wo`}{' '}
+                      <span className="font-semibold text-foreground">
+                        {formatValue(currentRecent.value, metric.unit)}
+                      </span>
+                    </>
+                  )}
                   {currentToday !== undefined && (
                     <>
                       {' · '}Heute{' '}

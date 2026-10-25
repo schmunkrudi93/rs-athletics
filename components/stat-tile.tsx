@@ -5,7 +5,8 @@ import { formatDate, formatValue } from '@/lib/format';
 import { oneRepMaxBreakdown } from '@/lib/one-rep-max';
 import type { MetricStat } from '@/lib/metrics';
 
-/** Kachel mit dem Bestwert (PB) der Metrik im gewählten Zeitfenster + Datum.
+/** Kachel mit dem Bestwert (PB) der Metrik im gewählten Zeitfenster + Datum,
+ *  darunter Ø im Fenster und der gleitende Schnitt der letzten ≥4 Wochen.
  *  Das Zeitfenster steuert der Schalter über dem Kachel-Raster. */
 export function StatTile({
   stat,
@@ -16,7 +17,7 @@ export function StatTile({
   selected?: boolean;
   onClick?: () => void;
 }) {
-  const { metric, best, count } = stat;
+  const { metric, best, count, average, recent } = stat;
   const unit = metric.unit;
   const breakdown = best ? oneRepMaxBreakdown(best.reps, best.weight, unit) : null;
 
@@ -54,6 +55,30 @@ export function StatTile({
           <span className="text-foreground-subtle">Kein Wert</span>
         )}
       </div>
+
+      {/* Durchschnitte: Ø im gewählten Zeitfenster + gleitender Schnitt (mind. 4 Wochen). */}
+      {(average !== null || recent) && (
+        <dl className="mt-auto flex flex-col gap-1 border-t border-line pt-2 text-xs">
+          <AvgRow label="Ø" value={average !== null ? formatValue(average, unit) : '–'} />
+          <AvgRow
+            label={!recent ? 'Ø 4 Wo' : recent.capped ? 'Ø 4 Mon' : `Ø ${recent.weeks} Wo`}
+            hint={recent ? `${recent.sessions} Einh.` : undefined}
+            value={recent ? formatValue(recent.value, unit) : '–'}
+          />
+        </dl>
+      )}
     </button>
+  );
+}
+
+function AvgRow({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-2">
+      <dt className="text-foreground-subtle">
+        {label}
+        {hint && <span className="ml-1 text-[10px]">· {hint}</span>}
+      </dt>
+      <dd className="stat-number font-semibold text-foreground">{value}</dd>
+    </div>
   );
 }

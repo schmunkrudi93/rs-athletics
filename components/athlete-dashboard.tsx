@@ -26,6 +26,7 @@ import {
   groupByMetric,
   hasNote,
   RANGES,
+  recentAverage,
   sortMetrics,
   type Range,
 } from '@/lib/metrics';
@@ -158,12 +159,14 @@ export function AthleteDashboard({
   );
   // RSA-Tests der aktuellen Kategorie (eigene Kachel + Detailansicht).
   const rsaMetrics = useMemo(() => categoryMetrics.filter(isRsaMetric), [categoryMetrics]);
-  // Kachel-Kennzahlen je Metrik im gewählten Zeitfenster (Bestwert = PB im Fenster).
+  // Kachel-Kennzahlen je Metrik im gewählten Zeitfenster (Bestwert = PB im Fenster,
+  // Ø = Schnitt im Fenster). Der gleitende 4-Wochen-Schnitt hängt nicht am Fenster.
   const stats = useMemo(
     () =>
-      tileMetrics.map((m) =>
-        computeStat(m, filterByRange(dailyByMetric.get(m.id) ?? [], tileRange)),
-      ),
+      tileMetrics.map((m) => {
+        const daily = dailyByMetric.get(m.id) ?? [];
+        return computeStat(m, filterByRange(daily, tileRange), recentAverage(daily));
+      }),
     [tileMetrics, dailyByMetric, tileRange],
   );
   // Games-Speed-/Richtungswechsel-Defizit (nur im cod-Reiter, wenn Referenz + Cut da sind).
