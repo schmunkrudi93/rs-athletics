@@ -3,17 +3,20 @@
 import { clsx } from '@/lib/clsx';
 import { formatDate, formatValue } from '@/lib/format';
 import { oneRepMaxBreakdown } from '@/lib/one-rep-max';
-import type { MetricStat } from '@/lib/metrics';
+import type { MetricStat, Range } from '@/lib/metrics';
 
 /** Kachel mit dem Bestwert (PB) der Metrik im gewählten Zeitfenster + Datum,
  *  darunter Ø im Fenster und der gleitende Schnitt der letzten ≥4 Wochen.
  *  Das Zeitfenster steuert der Schalter über dem Kachel-Raster. */
 export function StatTile({
   stat,
+  range,
   selected,
   onClick,
 }: {
   stat: MetricStat;
+  /** Gewähltes Kachel-Zeitfenster (für die Beschriftung des Schnitts). */
+  range: Range;
   selected?: boolean;
   onClick?: () => void;
 }) {
@@ -58,11 +61,19 @@ export function StatTile({
 
       {/* Durchschnitte: Ø im gewählten Zeitfenster + gleitender Schnitt (mind. 4 Wochen). */}
       {(average !== null || recent) && (
-        <dl className="mt-auto flex flex-col gap-1 border-t border-line pt-2 text-xs">
-          <AvgRow label="Ø" value={average !== null ? formatValue(average, unit) : '–'} />
+        <dl className="mt-auto flex flex-col gap-2 border-t border-line pt-2 text-xs">
           <AvgRow
-            label={!recent ? 'Ø 4 Wo' : recent.capped ? 'Ø 4 Mon' : `Ø ${recent.weeks} Wo`}
-            hint={recent ? `${recent.sessions} Einh.` : undefined}
+            label={`Ø ${RANGE_TEXT[range]}`}
+            hint={sessionsText(count)}
+            value={average !== null ? formatValue(average, unit) : '–'}
+          />
+          <AvgRow
+            label="Ø Form"
+            hint={
+              recent
+                ? `${recent.capped ? '4 Monate' : `${recent.weeks} Wochen`} · ${sessionsText(recent.sessions)}`
+                : 'keine Einheit in 4 Monaten'
+            }
             value={recent ? formatValue(recent.value, unit) : '–'}
           />
         </dl>
@@ -71,14 +82,27 @@ export function StatTile({
   );
 }
 
-function AvgRow({ label, value, hint }: { label: string; value: string; hint?: string }) {
+// Zeitfenster-Schalter in Worten (Unterzeile des Fenster-Schnitts).
+const RANGE_TEXT: Record<Range, string> = {
+  '1M': '1 Monat',
+  '3M': '3 Monate',
+  '1Y': '1 Jahr',
+  all: 'Gesamt',
+};
+
+function sessionsText(n: number): string {
+  return n === 1 ? '1 Einheit' : `${n} Einheiten`;
+}
+
+/** Zeile: Bezeichnung links, Wert rechts; kleine Unterzeile über die volle Breite. */
+function AvgRow({ label, value, hint }: { label: string; value: string; hint: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-2">
-      <dt className="text-foreground-subtle">
-        {label}
-        {hint && <span className="ml-1 text-[10px]">· {hint}</span>}
-      </dt>
-      <dd className="stat-number font-semibold text-foreground">{value}</dd>
+    <div>
+      <div className="flex items-baseline justify-between gap-2">
+        <dt className="truncate text-foreground-muted">{label}</dt>
+        <dd className="stat-number shrink-0 font-semibold text-foreground">{value}</dd>
+      </div>
+      <p className="text-[10px] leading-tight text-foreground-subtle">{hint}</p>
     </div>
   );
 }

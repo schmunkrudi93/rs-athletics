@@ -723,9 +723,13 @@ function EntryScreen({
                   {currentRecent && (
                     <>
                       {' · '}
-                      {currentRecent.capped ? 'Ø 4 Mon' : `Ø ${currentRecent.weeks} Wo`}{' '}
+                      Ø Form{' '}
                       <span className="font-semibold text-foreground">
                         {formatValue(currentRecent.value, metric.unit)}
+                      </span>
+                      <span className="text-xs text-foreground-subtle">
+                        {' '}
+                        ({currentRecent.capped ? '4 Mon.' : `${currentRecent.weeks} Wo.`})
                       </span>
                     </>
                   )}

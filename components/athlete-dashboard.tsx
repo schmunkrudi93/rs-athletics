@@ -545,6 +545,7 @@ export function AthleteDashboard({
                     <StatTile
                       key={s.metric.id}
                       stat={s}
+                      range={tileRange}
                       selected={s.metric.id === selectedId}
                       onClick={() => setSelectedId(s.metric.id)}
                     />
