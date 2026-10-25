@@ -11,7 +11,7 @@ type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 const VARIANTS: Record<Variant, string> = {
-  primary: 'bg-accent text-white hover:bg-accent-strong border border-transparent',
+  primary: 'bg-accent-strong text-white hover:brightness-110 border border-transparent',
   outline: 'border border-line bg-surface text-foreground hover:border-accent/50',
   ghost: 'border border-transparent text-foreground-muted hover:text-foreground hover:bg-surface',
   danger: 'border border-transparent text-danger hover:bg-danger/10',

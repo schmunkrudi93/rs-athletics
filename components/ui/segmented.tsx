@@ -7,6 +7,9 @@ type SegmentedProps<T extends string> = {
   value: T;
   onChange: (value: T) => void;
   size?: 'sm' | 'md';
+  /** Volle Breite, Optionen brechen in weitere Zeilen um (statt horizontal zu
+   *  scrollen) – so bleiben alle Reiter sichtbar, auch auf schmalen Handys. */
+  wrap?: boolean;
   className?: string;
 };
 
@@ -16,10 +19,17 @@ export function Segmented<T extends string>({
   value,
   onChange,
   size = 'md',
+  wrap = false,
   className,
 }: SegmentedProps<T>) {
   return (
-    <div className={clsx('inline-flex rounded-xl border border-line bg-surface p-1', className)}>
+    <div
+      className={clsx(
+        'rounded-xl border border-line bg-surface p-1',
+        wrap ? 'flex w-full flex-wrap gap-1' : 'inline-flex',
+        className,
+      )}
+    >
       {options.map((o) => (
         <button
           key={o.key}
@@ -28,9 +38,11 @@ export function Segmented<T extends string>({
           aria-pressed={value === o.key}
           className={clsx(
             'rounded-lg font-medium transition',
+            // Im Umbruch-Modus füllen die Knöpfe ihre Zeile gleichmäßig auf.
+            wrap && 'flex-auto whitespace-nowrap text-center',
             size === 'sm' ? 'px-2.5 py-1 text-xs' : 'px-3.5 py-1.5 text-sm',
             value === o.key
-              ? 'bg-accent text-white shadow-card'
+              ? 'bg-accent-strong text-white shadow-card'
               : 'text-foreground-muted hover:text-foreground',
           )}
         >
