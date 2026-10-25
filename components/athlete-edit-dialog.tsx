@@ -33,7 +33,8 @@ type Props = {
   onSaved: (updated: AthleteRow) => void;
 };
 
-/** Stammdaten eines Athleten korrigieren (Name/Position/Sportart/Geburtsdatum/Notiz)
+/** Stammdaten eines Athleten korrigieren (Name/Position/Sportart/Geburtsdatum/Notiz,
+ *  Health-Freischaltung inkl. Größe/Geschlecht)
  *  und den Login-Code ändern. Der Code IST das Login – seine Änderung läuft daher
  *  über die geschützte Server-Route (service_role), alles Übrige via RLS-Client. */
 export function AthleteEditDialog({ open, onClose, athlete, onSaved }: Props) {
@@ -42,6 +43,9 @@ export function AthleteEditDialog({ open, onClose, athlete, onSaved }: Props) {
   const [sport, setSport] = useState('');
   const [birthDate, setBirthDate] = useState('');
   const [notes, setNotes] = useState('');
+  const [healthEnabled, setHealthEnabled] = useState(false);
+  const [heightCm, setHeightCm] = useState('');
+  const [sex, setSex] = useState<'' | 'm' | 'f'>('');
   const [code, setCode] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +58,9 @@ export function AthleteEditDialog({ open, onClose, athlete, onSaved }: Props) {
     setSport(athlete.sport ?? '');
     setBirthDate(athlete.birth_date ?? '');
     setNotes(athlete.notes ?? '');
+    setHealthEnabled(athlete.health_enabled === true);
+    setHeightCm(athlete.height_cm != null ? String(athlete.height_cm) : '');
+    setSex(athlete.sex ?? '');
     setCode(athlete.code);
     setSaving(false);
     setError(null);
@@ -65,6 +72,12 @@ export function AthleteEditDialog({ open, onClose, athlete, onSaved }: Props) {
     const name = fullName.trim();
     if (!name) {
       setError('Bitte einen Namen eingeben.');
+      return;
+    }
+    // Größe optional; Komma als Dezimaltrenner erlauben (iOS-Ziffernblock).
+    const heightValue = heightCm.trim() ? Number(heightCm.replace(',', '.')) : null;
+    if (heightValue != null && !(heightValue >= 100 && heightValue <= 250)) {
+      setError('Bitte eine Größe zwischen 100 und 250 cm eingeben.');
       return;
     }
     const nextCode = code.trim();
@@ -110,6 +123,9 @@ export function AthleteEditDialog({ open, onClose, athlete, onSaved }: Props) {
         sport: sport.trim() || null,
         birth_date: birthDate || null,
         notes: notes.trim() || null,
+        health_enabled: healthEnabled,
+        height_cm: heightValue,
+        sex: sex || null,
       })
       .eq('id', athlete.id)
       .select()
@@ -198,6 +214,60 @@ export function AthleteEditDialog({ open, onClose, athlete, onSaved }: Props) {
             rows={3}
             className="w-full rounded-xl border border-line bg-surface px-3 py-2 text-foreground placeholder:text-foreground-subtle focus:border-accent"
           />
+        </div>
+
+        {/* Health-Reiter (Gewicht/Umfänge/Herz) je Athlet freischalten. Größe +
+            Geschlecht braucht der Navy-KFA-Rechner. */}
+        <div className="flex flex-col gap-3 border-t border-line pt-4">
+          <label className="flex items-center justify-between gap-3" htmlFor="ae-health">
+            <span className="flex flex-col">
+              <span className="text-sm font-medium text-foreground">Health-Reiter</span>
+              <span className="text-xs text-foreground-subtle">
+                Gewicht, Umfänge &amp; KFA, Ruhepuls/HRV
+              </span>
+            </span>
+            <input
+              id="ae-health"
+              type="checkbox"
+              checked={healthEnabled}
+              onChange={(e) => setHealthEnabled(e.target.checked)}
+              className="h-5 w-5 shrink-0 accent-accent"
+            />
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <label className={LABEL} htmlFor="ae-height">
+                Größe (cm)
+              </label>
+              <input
+                id="ae-height"
+                type="text"
+                inputMode="decimal"
+                value={heightCm}
+                onChange={(e) => setHeightCm(e.target.value)}
+                placeholder="z. B. 182"
+                className={FIELD}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className={LABEL} htmlFor="ae-sex">
+                Geschlecht
+              </label>
+              <select
+                id="ae-sex"
+                value={sex}
+                onChange={(e) => setSex(e.target.value as '' | 'm' | 'f')}
+                className={FIELD}
+              >
+                <option value="">–</option>
+                <option value="m">Männlich</option>
+                <option value="f">Weiblich</option>
+              </select>
+            </div>
+          </div>
+          <p className="text-xs text-foreground-subtle">
+            Größe &amp; Geschlecht werden nur für den Körperfett-Rechner (Navy-Formel) gebraucht.
+          </p>
         </div>
 
         <div className="flex flex-col gap-1.5 border-t border-line pt-4">

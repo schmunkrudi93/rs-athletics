@@ -37,7 +37,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="card relative z-10 w-full rounded-b-none p-5 pb-safe sm:max-w-md sm:rounded-2xl"
+        className="card relative z-10 max-h-[90dvh] w-full overflow-y-auto rounded-b-none p-5 pb-safe sm:max-w-md sm:rounded-2xl"
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-display text-lg font-semibold text-foreground">{title}</h2>

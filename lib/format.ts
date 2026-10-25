@@ -7,6 +7,7 @@ const PRECISION: Record<string, { min: number; max: number }> = {
   s: { min: 2, max: 2 }, // Sprintzeiten: 1,81 s
   'm/s': { min: 1, max: 2 }, // 9,2 m/s
   cm: { min: 0, max: 1 }, // 245 cm
+  '%': { min: 1, max: 1 }, // Körperfett: 16,1 %
 };
 const DEFAULT_PRECISION = { min: 0, max: 2 }; // u. a. RSI (einheitslos)
 

@@ -18,6 +18,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   cod: 'Richtungswechsel',
   endurance: 'Ausdauer',
   custom: 'Sonstige',
+  health: 'Health',
 };
 
 /** Coach verwaltet alle Metriken (Tests): archivieren (ausblenden, Werte bleiben),

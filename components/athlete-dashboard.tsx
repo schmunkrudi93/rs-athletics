@@ -14,10 +14,13 @@ import { GamesSpeedDeficit } from '@/components/games-speed-deficit';
 import { GameSpeedPreview } from '@/components/game-speed-preview';
 import { RsaTile } from '@/components/rsa-tile';
 import { RsaDetail } from '@/components/rsa-detail';
+import { HealthDetail, HealthOverview } from '@/components/health-view';
+import { HealthEntryDialog } from '@/components/health-entry-dialog';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { CATEGORY_ORDER, VISIBLE_CATEGORIES, type MetricCategory } from '@/lib/constants';
 import { computeDeficits, isGamesSpeedMetric, isGamesSpeedReference } from '@/lib/games-speed';
 import { isRsaMetric } from '@/lib/rsa';
+import { dailyLatest, HEALTH_PAGES, healthPageOf, type HealthPage } from '@/lib/health';
 import {
   computeStat,
   dailyBest,
@@ -36,6 +39,7 @@ import {
   asymmetrySeverity,
   computeSideComparison,
   supportsSide,
+  type Side,
   type SideComparison,
 } from '@/lib/laterality';
 import type { AthleteRow, MeasurementRow, MetricRow } from '@/lib/database.types';
@@ -52,6 +56,7 @@ const CATEGORY_LABELS: Record<MetricCategory, string> = {
   cod: 'Richtungswechsel',
   endurance: 'Ausdauer',
   custom: 'Sonstige',
+  health: 'Health',
 };
 
 type AthleteDashboardProps = {
@@ -103,7 +108,10 @@ export function AthleteDashboard({
   // „Seiten"-Umschaltung im Dashboard: Hauptansicht vs. Game-Speed-Detail
   // (eigene Seite via Client-State – reicht durch beide Render-Kontexte, ohne
   // Routen/Auth zu duplizieren). gsSelectedId = aktive Metrik im Detail.
-  const [view, setView] = useState<'main' | 'gamespeed' | 'rsa'>('main');
+  const [view, setView] = useState<'main' | 'gamespeed' | 'rsa' | 'health'>('main');
+  // Health-Reiter: aktive Unterseite + eigener Eingabedialog (alle Werte auf einmal).
+  const [healthPage, setHealthPage] = useState<HealthPage>('weight');
+  const [healthDialogOpen, setHealthDialogOpen] = useState(false);
   const [gsSelectedId, setGsSelectedId] = useState<string | null>(null);
   const [rsaMetricId, setRsaMetricId] = useState<string | null>(null);
 
@@ -200,15 +208,27 @@ export function AthleteDashboard({
     null;
   // Für die RSA-Detailansicht aktiv gewählter RSA-Test.
   const rsaMetric = rsaMetrics.find((m) => m.id === rsaMetricId) ?? rsaMetrics[0] ?? null;
+  // Health-Metriken (Gewicht/Umfänge/Herz) – Unterseiten statt Bestwert-Kacheln.
+  const healthMetrics = useMemo(() => metrics.filter((m) => m.category === 'health'), [metrics]);
+  const healthPageMetrics = useMemo(
+    () => sortMetrics(healthMetrics.filter((m) => healthPageOf(m) === healthPage)),
+    [healthMetrics, healthPage],
+  );
+  const healthPageInfo = HEALTH_PAGES.find((p) => p.key === healthPage) ?? HEALTH_PAGES[0];
+  const isHealthTab = category === 'health';
 
   // Reiter nur für Kategorien zeigen, die tatsächlich (aktive) Metriken haben –
   // so erscheinen Kraft/Richtungswechsel/Ausdauer/Sonstige erst, sobald dort
-  // Tests existieren, und es bleiben keine leeren Reiter stehen.
+  // Tests existieren, und es bleiben keine leeren Reiter stehen. Health zusätzlich
+  // nur, wenn der Coach ihn für diesen Athleten freigeschaltet hat.
+  const healthEnabled = athlete?.health_enabled === true;
   const presentCategories = useMemo<MetricCategory[]>(() => {
     const present = new Set(metrics.map((m) => m.category));
-    const ordered = CATEGORY_ORDER.filter((c) => present.has(c));
+    const ordered = CATEGORY_ORDER.filter(
+      (c) => present.has(c) && (c !== 'health' || healthEnabled),
+    );
     return ordered.length > 0 ? ordered : VISIBLE_CATEGORIES;
-  }, [metrics]);
+  }, [metrics, healthEnabled]);
   const categoryOptions = presentCategories.map((c) => ({ key: c, label: CATEGORY_LABELS[c] }));
 
   // Aktiven Reiter gültig halten, falls seine Kategorie wegfällt (z. B. alles archiviert).
@@ -220,6 +240,7 @@ export function AthleteDashboard({
   useEffect(() => {
     if (view === 'gamespeed' && category !== 'cod') setView('main');
     if (view === 'rsa' && !rsaMetrics.some((m) => m.id === rsaMetricId)) setView('main');
+    if (view === 'health' && category !== 'health') setView('main');
   }, [view, category, rsaMetrics, rsaMetricId]);
 
   return (
@@ -405,20 +426,80 @@ export function AthleteDashboard({
               />
             )}
           </>
+        ) : view === 'health' ? (
+          /* ---- Health-Unterseite (Gewicht / Umfänge / Herz) ---- */
+          <>
+            <div className="flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setView('main')}
+                className="inline-flex w-fit items-center gap-1.5 text-sm text-foreground-muted transition hover:text-foreground"
+              >
+                <svg
+                  viewBox="0 0 16 16"
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M10 4l-4 4 4 4" />
+                </svg>
+                Health
+              </button>
+              {enableEntry && (
+                <Button
+                  size="sm"
+                  onClick={() => setHealthDialogOpen(true)}
+                  disabled={loading || !athleteId}
+                >
+                  + Eintragen
+                </Button>
+              )}
+            </div>
+
+            <Segmented
+              wrap
+              options={HEALTH_PAGES.map((p) => ({ key: p.key, label: p.label }))}
+              value={healthPage}
+              onChange={setHealthPage}
+            />
+
+            <h1 className="font-display text-2xl font-bold text-foreground">
+              {healthPageInfo.title}
+            </h1>
+
+            <HealthDetail
+              page={healthPage}
+              athlete={athlete}
+              metrics={healthMetrics}
+              grouped={grouped}
+              renderDetail={(metric, rows) => (
+                <MetricDetailSection
+                  key={metric.id}
+                  metric={metric}
+                  rawRows={rows}
+                  range={range}
+                  onRangeChange={setRange}
+                  enableEntry={enableEntry}
+                  onAdd={() => setHealthDialogOpen(true)}
+                  enableEdit={enableEdit}
+                  canEditRow={canEditMeasurement}
+                  onEdit={setEditing}
+                />
+              )}
+            />
+          </>
         ) : (
           /* ---- Hauptansicht: Reiter, Kacheln, (cod) Game-Speed-Preview, Verlauf ---- */
           <>
-            {/* Reiter (eine Zeile, horizontal scrollbar) + Eintragen auf eigener Zeile */}
+            {/* Reiter (brechen um statt zu scrollen – alle sichtbar) + Eintragen auf eigener Zeile */}
             <div className="flex flex-col gap-3">
-              <div className="no-scrollbar overflow-x-auto">
-                <Segmented
-                  className="whitespace-nowrap"
-                  options={categoryOptions}
-                  value={category}
-                  onChange={setCategory}
-                />
-              </div>
-              {enableEntry && (
+              <Segmented wrap options={categoryOptions} value={category} onChange={setCategory} />
+
+              {enableEntry && !isHealthTab && (
                 <Button
                   onClick={() => setDialogOpen(true)}
                   disabled={loading || !athleteId}
@@ -431,6 +512,16 @@ export function AthleteDashboard({
 
             {loading ? (
               <SkeletonTiles />
+            ) : isHealthTab ? (
+              <HealthOverview
+                athlete={athlete}
+                metrics={healthMetrics}
+                grouped={grouped}
+                onOpen={(page) => {
+                  setHealthPage(page);
+                  setView('health');
+                }}
+              />
             ) : (
               <>
                 {/* Zeitfenster-Schalter für die Bestwert-Kacheln (wie beim Graphen). */}
@@ -518,6 +609,18 @@ export function AthleteDashboard({
         />
       )}
 
+      {enableEntry && athleteId && (
+        <HealthEntryDialog
+          open={healthDialogOpen}
+          onClose={() => setHealthDialogOpen(false)}
+          title={`${healthPageInfo.label} eintragen`}
+          athleteId={athleteId}
+          metrics={healthPageMetrics}
+          enteredBy={enteredBy}
+          onSaved={load}
+        />
+      )}
+
       {enableEdit && (
         <MeasurementEditDialog
           open={!!editing}
@@ -565,21 +668,34 @@ function MetricDetailSection({
   canEditRow?: (m: MeasurementRow) => boolean;
   onEdit?: (m: MeasurementRow) => void;
 }) {
+  // Health-Werte (Gewicht/Umfänge/Herz) sind Verlauf, keine Leistung: pro Tag zählt
+  // der zuletzt erfasste Wert statt des Tagesbestwerts. Gliedmaßen-Umfänge werden
+  // je Seite gezeichnet (L und R in einer Kurve wäre irreführend).
+  const isHealth = metric.category === 'health';
+  const splitSides = isHealth && supportsSide(metric);
+  const [chartSide, setChartSide] = useState<Side>('left');
+  const sideRows = useMemo(
+    () => (splitSides ? rawRows.filter((r) => r.side === chartSide) : rawRows),
+    [splitSides, rawRows, chartSide],
+  );
   const seriesAll = useMemo(
-    () => dailyBest(rawRows, metric.higher_is_better),
-    [rawRows, metric.higher_is_better],
+    () => (isHealth ? dailyLatest(sideRows) : dailyBest(sideRows, metric.higher_is_better)),
+    [isHealth, sideRows, metric.higher_is_better],
   );
   const series = useMemo(() => filterByRange(seriesAll, range), [seriesAll, range]);
   const historyDesc = useMemo(() => [...seriesAll].reverse(), [seriesAll]);
   // Links/Rechts-Vergleich aus den Roh-Werten (nur Richtungswechsel-Tests mit Seite).
   const sideComparison = useMemo(
-    () => (supportsSide(metric) ? computeSideComparison(rawRows, metric.higher_is_better) : null),
-    [metric, rawRows],
+    () =>
+      supportsSide(metric)
+        ? computeSideComparison(rawRows, metric.higher_is_better, isHealth ? 'latest' : 'best')
+        : null,
+    [metric, rawRows, isHealth],
   );
   // Roh-Versuche je Kalendertag (chronologisch) – fürs Aufklappen einer Tageszeile.
   const rawByDay = useMemo(() => {
     const map = new Map<string, MeasurementRow[]>();
-    for (const row of rawRows) {
+    for (const row of sideRows) {
       const key = dayKey(row.tested_at);
       const list = map.get(key);
       if (list) list.push(row);
@@ -589,7 +705,7 @@ function MetricDetailSection({
       list.sort((a, b) => a.created_at.localeCompare(b.created_at));
     }
     return map;
-  }, [rawRows]);
+  }, [sideRows]);
 
   return (
     <section className="card flex flex-col gap-4 p-4">
@@ -597,7 +713,12 @@ function MetricDetailSection({
         <div>
           <h2 className="font-display text-lg font-semibold text-foreground">{metric.label}</h2>
           <p className="text-xs text-foreground-subtle">
-            {metric.higher_is_better ? 'Höher ist besser' : 'Niedriger ist besser'}
+            {/* Gewicht/Umfänge: Richtung hängt vom Ziel ab -> keine Wertung zeigen. */}
+            {isHealth && healthPageOf(metric) !== 'heart'
+              ? 'Verlauf'
+              : metric.higher_is_better
+                ? 'Höher ist besser'
+                : 'Niedriger ist besser'}
             {metric.unit ? ` · ${metric.unit}` : ''}
           </p>
         </div>
@@ -611,6 +732,19 @@ function MetricDetailSection({
 
       {sideComparison && (sideComparison.left || sideComparison.right) && (
         <SideComparisonBlock comparison={sideComparison} unit={metric.unit} />
+      )}
+
+      {splitSides && (
+        <Segmented
+          size="sm"
+          className="self-start"
+          options={[
+            { key: 'left', label: 'Verlauf links' },
+            { key: 'right', label: 'Verlauf rechts' },
+          ]}
+          value={chartSide}
+          onChange={setChartSide}
+        />
       )}
 
       {seriesAll.length === 0 ? (
@@ -635,6 +769,7 @@ function MetricDetailSection({
                 m={m}
                 unit={metric.unit}
                 dayRows={rawByDay.get(dayKey(m.tested_at)) ?? [m]}
+                chosenLabel={isHealth ? 'Zuletzt' : 'Bestwert'}
                 canEdit={enableEdit}
                 canEditRow={canEditRow}
                 onEdit={onEdit}
@@ -743,6 +878,7 @@ function HistoryRow({
   m,
   unit,
   dayRows,
+  chosenLabel = 'Bestwert',
   canEdit = false,
   canEditRow = () => true,
   onEdit,
@@ -750,6 +886,8 @@ function HistoryRow({
   m: MeasurementRow;
   unit: string;
   dayRows: MeasurementRow[];
+  /** Badge für den Tageswert, der in Graph/Liste zählt (Health: „Zuletzt“). */
+  chosenLabel?: string;
   canEdit?: boolean;
   canEditRow?: (row: MeasurementRow) => boolean;
   onEdit?: (row: MeasurementRow) => void;
@@ -803,7 +941,7 @@ function HistoryRow({
                       <EnteredByBadge by={r.entered_by} />
                       {isBest && (
                         <span className="rounded-md bg-accent-soft px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
-                          Bestwert
+                          {chosenLabel}
                         </span>
                       )}
                     </span>

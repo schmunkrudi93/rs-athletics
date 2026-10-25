@@ -12,7 +12,14 @@ export const CODE_LENGTH = 6;
 export type Role = 'athlete' | 'coach';
 
 /** Metrik-Kategorien (erweiterbar ohne Schemaänderung). */
-export type MetricCategory = 'sprint' | 'jump' | 'strength' | 'cod' | 'endurance' | 'custom';
+export type MetricCategory =
+  | 'sprint'
+  | 'jump'
+  | 'strength'
+  | 'cod'
+  | 'endurance'
+  | 'custom'
+  | 'health';
 
 /** Anzeige-Reihenfolge der Reiter. Im Dashboard werden nur Kategorien gezeigt,
  *  die tatsächlich (aktive) Metriken haben – leere Reiter bleiben aus. */
@@ -23,6 +30,7 @@ export const CATEGORY_ORDER: MetricCategory[] = [
   'cod',
   'endurance',
   'custom',
+  'health', // nur bei athletes.health_enabled (siehe athlete-dashboard)
 ];
 
 /** Fallback-Reiter, falls (noch) keine Metriken geladen sind. */

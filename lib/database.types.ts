@@ -20,6 +20,9 @@ export type Database = {
           birth_date: string | null;
           notes: string | null;
           is_active: boolean;
+          health_enabled: boolean;
+          height_cm: number | null;
+          sex: 'm' | 'f' | null;
           created_at: string;
         };
         Insert: {
@@ -31,6 +34,9 @@ export type Database = {
           birth_date?: string | null;
           notes?: string | null;
           is_active?: boolean;
+          health_enabled?: boolean;
+          height_cm?: number | null;
+          sex?: 'm' | 'f' | null;
           created_at?: string;
         };
         Update: Partial<Database['public']['Tables']['athletes']['Insert']>;

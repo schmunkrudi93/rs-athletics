@@ -27,12 +27,20 @@ create table if not exists public.athletes (
 -- Nachrüstung für bestehende DBs: Geburtsdatum ergänzen (idempotent).
 alter table public.athletes add column if not exists birth_date date;
 
+-- Nachrüstung: Health-Reiter (Gewicht/Umfänge/Herz). Coach schaltet ihn je
+-- Athlet frei (athletes_write ist coach-only -> Athlet kann sich nicht selbst
+-- freischalten). Größe + Geschlecht braucht der Navy-KFA-Rechner.
+alter table public.athletes add column if not exists health_enabled boolean not null default false;
+alter table public.athletes add column if not exists height_cm numeric;
+alter table public.athletes add column if not exists sex text
+  check (sex is null or sex in ('m', 'f'));
+
 -- METRIK-KATALOG: definiert, WAS getrackt werden kann
 create table if not exists public.metrics (
   id               uuid primary key default gen_random_uuid(),
   key              text unique not null,    -- z.B. "sprint_10m"
   label            text not null,           -- Anzeigename, z.B. "10 m"
-  category         text not null,           -- 'sprint' | 'jump' | 'strength' | 'cod' | 'custom'
+  category         text not null,           -- 'sprint' | 'jump' | 'strength' | 'cod' | 'endurance' | 'health' | 'custom'
   unit             text not null,           -- 's' | 'm/s' | 'cm' | 'kg' | 'reps' | ''
   higher_is_better boolean not null,        -- WICHTIG für Trend-Richtung & Farben
   sort_order       int default 0,
@@ -271,4 +279,30 @@ on conflict (key) do nothing;
 insert into public.metrics (key, label, category, unit, higher_is_better, sort_order) values
   ('5_0_5','5-0-5','cod','s',false,5),
   ('pro_agility','5-10-5 (Pro Agility)','cod','s',false,6)
+on conflict (key) do nothing;
+
+-- ----------------------------------------------------------------------------
+-- SEED v5: Health (Gewicht, Umfänge, Herz)
+-- Nur sichtbar für Athleten mit athletes.health_enabled = true. Keine Bestwerte,
+-- sondern Verlauf/Trend. Das Frontend erkennt die Gruppen am key-Präfix
+-- ('body_' / 'circ_' / 'heart_') – key NICHT ändern, Label frei änderbar.
+-- Gliedmaßen-Umfänge nutzen measurements.side (links/rechts).
+-- Navy-KFA: Männer Hals + Bauch (Höhe Nabel), Frauen Hals + Taille + Hüfte.
+-- ----------------------------------------------------------------------------
+insert into public.metrics (key, label, category, unit, higher_is_better, sort_order) values
+  -- GEWICHT
+  ('body_weight','Körpergewicht','health','kg',false,10),
+  -- UMFÄNGE
+  ('circ_neck','Hals','health','cm',false,20),
+  ('circ_shoulders','Schultern','health','cm',true,21),
+  ('circ_chest','Brust','health','cm',true,22),
+  ('circ_waist','Taille','health','cm',false,23),
+  ('circ_belly','Bauch (Nabel)','health','cm',false,24),
+  ('circ_hip','Hüfte','health','cm',false,25),
+  ('circ_arm','Oberarm','health','cm',true,26),
+  ('circ_thigh','Oberschenkel','health','cm',true,27),
+  ('circ_calf','Wade','health','cm',true,28),
+  -- HERZ
+  ('heart_rhr','Ruhepuls','health','bpm',false,40),
+  ('heart_hrv','HRV (RMSSD)','health','ms',true,41)
 on conflict (key) do nothing;
