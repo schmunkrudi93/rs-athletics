@@ -20,10 +20,24 @@ type ChartPoint = {
   iso: string;
   note: string | null;
   hasNote: boolean;
+  /** Gleitender Schnitt an diesem Tag (nur mit `avg`-Prop), sonst null. */
+  avg: number | null;
 };
 
-/** Verlaufskurve einer Metrik (Recharts). `series` = Tagesbestwerte, aufsteigend nach Datum. */
-export function TrendChart({ metric, series }: { metric: MetricRow; series: MeasurementRow[] }) {
+/** Verlaufskurve einer Metrik (Recharts). `series` = Tagesbestwerte, aufsteigend nach Datum.
+ *  Optional `avg` (gleiche Länge wie `series`): dann ist die Ø-Linie die Hauptkurve und
+ *  die Tageswerte erscheinen nur als blasse Punkte (z. B. Gewicht, 7-Tage-Ø). */
+export function TrendChart({
+  metric,
+  series,
+  avg,
+  avgLabel = 'Ø',
+}: {
+  metric: MetricRow;
+  series: MeasurementRow[];
+  avg?: (number | null)[];
+  avgLabel?: string;
+}) {
   // Touch-Geräte (kein Hover) zeigen den Tooltip per Tap statt per Maus-Hover.
   const [coarsePointer, setCoarsePointer] = useState(false);
   useEffect(() => {
@@ -33,13 +47,15 @@ export function TrendChart({ metric, series }: { metric: MetricRow; series: Meas
 
   if (series.length === 0) return null;
 
-  const data: ChartPoint[] = series.map((m) => ({
+  const data: ChartPoint[] = series.map((m, i) => ({
     name: formatDate(m.tested_at),
     value: m.value,
     iso: m.tested_at,
     note: hasNote(m.note) ? m.note.trim() : null,
     hasNote: hasNote(m.note),
+    avg: avg?.[i] ?? null,
   }));
+  const withAvg = !!avg && data.some((p) => p.avg != null);
 
   return (
     <div className="h-56 w-full">
@@ -63,19 +79,35 @@ export function TrendChart({ metric, series }: { metric: MetricRow; series: Meas
             tickFormatter={(v: number) => formatNumber(Number(v), metric.unit)}
           />
           <Tooltip
-            content={<ChartTooltip unit={metric.unit} />}
+            content={<ChartTooltip unit={metric.unit} avgLabel={avgLabel} />}
             cursor={{ stroke: '#2F6FC4', strokeWidth: 1 }}
             trigger={coarsePointer ? 'click' : 'hover'}
           />
           <Line
             type="monotone"
             dataKey="value"
-            stroke="#2F6FC4"
+            stroke={withAvg ? 'none' : '#2F6FC4'}
             strokeWidth={2}
-            dot={renderDot}
-            activeDot={{ r: 6, fill: '#2F6FC4', stroke: '#161B22', strokeWidth: 2 }}
+            dot={withAvg ? renderFaintDot : renderDot}
+            activeDot={
+              withAvg
+                ? { r: 4, fill: '#8B97A7', stroke: '#161B22', strokeWidth: 2 }
+                : { r: 6, fill: '#2F6FC4', stroke: '#161B22', strokeWidth: 2 }
+            }
             isAnimationActive={false}
           />
+          {withAvg && (
+            <Line
+              type="monotone"
+              dataKey="avg"
+              stroke="#2F6FC4"
+              strokeWidth={2.5}
+              dot={false}
+              activeDot={{ r: 6, fill: '#2F6FC4', stroke: '#161B22', strokeWidth: 2 }}
+              connectNulls
+              isAnimationActive={false}
+            />
+          )}
         </LineChart>
       </ResponsiveContainer>
     </div>
@@ -101,19 +133,33 @@ function renderDot({ cx, cy, index, payload }: DotProps) {
   return <circle key={key} cx={cx} cy={cy} r={3} fill="#2F6FC4" />;
 }
 
+/** Blasse Tageswert-Punkte unter der Ø-Linie. */
+function renderFaintDot({ cx, cy, index }: DotProps) {
+  const key = `fdot-${index}`;
+  if (cx == null || cy == null) return <g key={key} />;
+  return <circle key={key} cx={cx} cy={cy} r={2.5} fill="#8B97A7" fillOpacity={0.55} />;
+}
+
 type TooltipProps = {
   active?: boolean;
   payload?: { payload: ChartPoint }[];
   unit: string;
+  avgLabel: string;
 };
 
-function ChartTooltip({ active, payload, unit }: TooltipProps) {
+function ChartTooltip({ active, payload, unit, avgLabel }: TooltipProps) {
   if (!active || !payload || payload.length === 0) return null;
   const point = payload[0].payload;
   return (
     <div className="max-w-[12rem] rounded-lg border border-line bg-background-elevated px-3 py-2 text-xs shadow-card">
       <div className="text-foreground-muted">{formatDate(point.iso)}</div>
       <div className="stat-number text-sm">{formatValue(point.value, unit)}</div>
+      {point.avg != null && (
+        <div className="text-foreground-muted">
+          {avgLabel}{' '}
+          <span className="font-semibold text-accent">{formatValue(point.avg, unit)}</span>
+        </div>
+      )}
       {point.note && (
         <div className="mt-1 border-t border-line pt-1 leading-snug text-foreground-muted">
           {point.note}

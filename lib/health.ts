@@ -60,17 +60,78 @@ export function dailyLatest(rows: MeasurementRow[]): MeasurementRow[] {
   return [...byDay.values()].sort((a, b) => a.tested_at.localeCompare(b.tested_at));
 }
 
-/** Wert ca. `days` Tage vor dem letzten Eintrag (letzter Eintrag an/vor dem Stichtag).
- *  Basis für „−1,2 kg in 4 Wochen“. null, wenn es so weit zurück nichts gibt. */
-export function valueDaysBefore(dailyAsc: MeasurementRow[], days: number): MeasurementRow | null {
-  const last = dailyAsc[dailyAsc.length - 1];
-  if (!last) return null;
-  const cutoff = new Date(last.tested_at).getTime() - days * 24 * 60 * 60 * 1000;
-  let found: MeasurementRow | null = null;
+// ---- Gewicht: gleitender 7-Tage-Schnitt -------------------------------------
+// Tageswerte schwanken (Wasser, Salz, Essen) – aussagekräftig ist erst der
+// Schnitt über 7 Kalendertage. Ein Fenster zählt nur mit mind. 3 Einträgen.
+
+export const WEIGHT_WINDOW_DAYS = 7;
+export const WEIGHT_WINDOW_MIN = 3;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** 'YYYY-MM-DD' -> Tagesnummer (UTC, zeitzonensicher für reine Datumswerte). */
+function dayNumber(iso: string): number {
+  const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
+  return Math.round(Date.UTC(y, m - 1, d) / DAY_MS);
+}
+
+export type WindowAverage = {
+  /** null, wenn das Fenster weniger als WEIGHT_WINDOW_MIN Einträge hat. */
+  value: number | null;
+  /** Anzahl Tage mit Eintrag im Fenster. */
+  count: number;
+};
+
+/** Schnitt der Tageswerte im Fenster [endDay − 6, endDay]. `dailyAsc` = ein Wert pro Tag. */
+export function windowAverage(dailyAsc: MeasurementRow[], endIso: string): WindowAverage {
+  const end = dayNumber(endIso);
+  const start = end - (WEIGHT_WINDOW_DAYS - 1);
+  let sum = 0;
+  let count = 0;
   for (const r of dailyAsc) {
-    if (new Date(r.tested_at).getTime() <= cutoff) found = r;
+    const d = dayNumber(r.tested_at);
+    if (d >= start && d <= end) {
+      sum += r.value;
+      count++;
+    }
   }
-  return found;
+  return { value: count >= WEIGHT_WINDOW_MIN ? sum / count : null, count };
+}
+
+/** Datum `days` Tage vor `iso` als 'YYYY-MM-DD'. */
+function shiftIso(iso: string, days: number): string {
+  return new Date((dayNumber(iso) - days) * DAY_MS).toISOString().slice(0, 10);
+}
+
+export type WeightTrend = {
+  latest: MeasurementRow | null;
+  /** Ø der letzten 7 Tage (ab heute). */
+  current: WindowAverage;
+  /** Ø-Veränderung zur Vorwoche (Tag 1–7 vs. 8–14), rollend. */
+  weekDelta: number | null;
+  /** Ø-Veränderung pro Woche über 4 Wochen (Tag 1–7 vs. 29–35, geteilt durch 4). */
+  perWeek4: number | null;
+};
+
+/** Gewichtstrend aus den Tageswerten. Die Fenster hängen an HEUTE, nicht am
+ *  letzten Eintrag – wer nicht mehr einträgt, bekommt keinen veralteten Schnitt. */
+export function weightTrend(dailyAsc: MeasurementRow[], todayIso: string): WeightTrend {
+  const current = windowAverage(dailyAsc, todayIso);
+  const prev = windowAverage(dailyAsc, shiftIso(todayIso, 7));
+  const fourAgo = windowAverage(dailyAsc, shiftIso(todayIso, 28));
+  return {
+    latest: dailyAsc[dailyAsc.length - 1] ?? null,
+    current,
+    weekDelta:
+      current.value != null && prev.value != null ? current.value - prev.value : null,
+    perWeek4:
+      current.value != null && fourAgo.value != null ? (current.value - fourAgo.value) / 4 : null,
+  };
+}
+
+/** 7-Tage-Ø je Eintragstag (für die Ø-Linie im Graph); null, solange das
+ *  Fenster bis zu diesem Tag zu dünn ist. Gleiche Länge/Reihenfolge wie `dailyAsc`. */
+export function rollingWeightSeries(dailyAsc: MeasurementRow[]): (number | null)[] {
+  return dailyAsc.map((r) => windowAverage(dailyAsc, r.tested_at).value);
 }
 
 // ---- Herz: letzter Wert vs. persönlicher Normalwert -------------------------

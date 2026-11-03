@@ -20,7 +20,14 @@ import { getSupabaseClient } from '@/lib/supabase/client';
 import { CATEGORY_ORDER, VISIBLE_CATEGORIES, type MetricCategory } from '@/lib/constants';
 import { computeDeficits, isGamesSpeedMetric, isGamesSpeedReference } from '@/lib/games-speed';
 import { isRsaMetric } from '@/lib/rsa';
-import { dailyLatest, HEALTH_PAGES, healthPageOf, type HealthPage } from '@/lib/health';
+import {
+  dailyLatest,
+  HEALTH_KEYS,
+  HEALTH_PAGES,
+  healthPageOf,
+  rollingWeightSeries,
+  type HealthPage,
+} from '@/lib/health';
 import {
   computeStat,
   dailyBest,
@@ -684,6 +691,15 @@ function MetricDetailSection({
     [isHealth, sideRows, metric.higher_is_better],
   );
   const series = useMemo(() => filterByRange(seriesAll, range), [seriesAll, range]);
+  // Gewicht: 7-Tage-Ø als Hauptkurve. Auf der vollen Historie berechnet (sonst
+  // fehlten am Fensteranfang die Vortage) und dann aufs Zeitfenster gemappt.
+  const isWeight = metric.key === HEALTH_KEYS.weight;
+  const avgSeries = useMemo(() => {
+    if (!isWeight) return undefined;
+    const rolling = rollingWeightSeries(seriesAll);
+    const byId = new Map(seriesAll.map((r, i) => [r.id, rolling[i]]));
+    return series.map((r) => byId.get(r.id) ?? null);
+  }, [isWeight, seriesAll, series]);
   const historyDesc = useMemo(() => [...seriesAll].reverse(), [seriesAll]);
   // Links/Rechts-Vergleich aus den Roh-Werten (nur Richtungswechsel-Tests mit Seite).
   const sideComparison = useMemo(
@@ -755,7 +771,7 @@ function MetricDetailSection({
           Keine Werte in diesem Zeitraum.
         </p>
       ) : (
-        <TrendChart metric={metric} series={series} />
+        <TrendChart metric={metric} series={series} avg={avgSeries} avgLabel="Ø 7 Tage" />
       )}
 
       {historyDesc.length > 0 && (

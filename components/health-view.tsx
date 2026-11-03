@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import { clsx } from '@/lib/clsx';
-import { formatDate, formatDelta, formatPercentDelta, formatValue } from '@/lib/format';
+import { formatDate, formatDelta, formatPercentDelta, formatValue, todayISO } from '@/lib/format';
 import { sortMetrics } from '@/lib/metrics';
 import { supportsSide } from '@/lib/laterality';
 import {
@@ -13,10 +13,12 @@ import {
   healthPageOf,
   heartStatus,
   latestRow,
-  valueDaysBefore,
+  WEIGHT_WINDOW_MIN,
+  weightTrend,
   type BodyFatResult,
   type HealthPage,
   type HeartStatus,
+  type WeightTrend,
 } from '@/lib/health';
 import type { AthleteRow, MeasurementRow, MetricRow } from '@/lib/database.types';
 
@@ -58,6 +60,11 @@ function signedDelta(delta: number, unit: string): string {
   return Math.abs(delta) < 0.05 ? `±0 ${unit}` : formatDelta(delta, unit);
 }
 
+/** Gewichts-Ø auf 0,1 kg – mehr Genauigkeit gibt die Waage nicht her. */
+function round1(v: number): number {
+  return Math.round(v * 10) / 10;
+}
+
 function byKey(metrics: MetricRow[], key: string) {
   return metrics.find((m) => m.key === key) ?? null;
 }
@@ -81,8 +88,7 @@ export function HealthOverview({
     () => (weightMetric ? dailyLatest(grouped.get(weightMetric.id) ?? []) : []),
     [weightMetric, grouped],
   );
-  const weightLatest = weightDaily[weightDaily.length - 1] ?? null;
-  const weightBefore = valueDaysBefore(weightDaily, 28);
+  const weight = useMemo(() => weightTrend(weightDaily, todayISO()), [weightDaily]);
 
   const bodyFat = useMemo(() => bodyFatSeries(athlete, metrics, grouped), [athlete, metrics, grouped]);
   const bfPoints = bodyFat.ok ? bodyFat.points : [];
@@ -98,17 +104,20 @@ export function HealthOverview({
   return (
     <section className="flex flex-col gap-3">
       <OverviewCard
-        title="Gewicht"
+        title="Gewicht · Ø 7 Tage"
         onClick={() => onOpen('weight')}
-        value={weightLatest ? formatValue(weightLatest.value, 'kg') : null}
+        value={weight.current.value != null ? formatValue(round1(weight.current.value), 'kg') : null}
         sub={
-          weightLatest
-            ? weightBefore
-              ? `${signedDelta(weightLatest.value - weightBefore.value, 'kg')} in 4 Wochen`
-              : `Stand ${formatDate(weightLatest.tested_at)}`
-            : null
+          weight.weekDelta != null
+            ? `${signedDelta(weight.weekDelta, 'kg')} zur Vorwoche`
+            : weight.current.value != null
+              ? 'Vorwoche: noch zu wenige Einträge'
+              : weight.latest
+                ? `${missingEntries(weight)} · zuletzt ${formatValue(weight.latest.value, 'kg')}`
+                : null
         }
         empty="Gewichtsverlauf tracken"
+        forceSub={!!weight.latest}
       />
       <OverviewCard
         title="Umfänge & Körperfett"
@@ -266,6 +275,14 @@ export function HealthDetail({
   );
 }
 
+/** „Noch 2 Einträge für den Ø“ – wie viele im aktuellen 7-Tage-Fenster fehlen. */
+function missingEntries(trend: WeightTrend): string {
+  const missing = WEIGHT_WINDOW_MIN - trend.current.count;
+  return `Noch ${missing} ${missing === 1 ? 'Eintrag' : 'Einträge'} für den Ø`;
+}
+
+/** Gewicht-Kopf: 7-Tage-Ø als Hauptwert (Tageswerte schwanken), dazu die rollende
+ *  Veränderung zur Vorwoche, das Tempo über 4 Wochen und klein der letzte Einzelwert. */
 function WeightSummary({
   metric,
   grouped,
@@ -273,16 +290,54 @@ function WeightSummary({
   metric: MetricRow | null;
   grouped: Map<string, MeasurementRow[]>;
 }) {
-  const daily = metric ? dailyLatest(grouped.get(metric.id) ?? []) : [];
-  const latest = daily[daily.length - 1];
+  const daily = useMemo(
+    () => (metric ? dailyLatest(grouped.get(metric.id) ?? []) : []),
+    [metric, grouped],
+  );
+  const trend = useMemo(() => weightTrend(daily, todayISO()), [daily]);
+  const { latest, current, weekDelta, perWeek4 } = trend;
   if (!latest) return null;
-  const w1 = valueDaysBefore(daily, 7);
-  const w4 = valueDaysBefore(daily, 28);
+
   return (
-    <section className="card grid grid-cols-3 gap-2 p-4">
-      <SummaryCell label="Aktuell" value={formatValue(latest.value, 'kg')} />
-      <SummaryCell label="7 Tage" value={w1 ? signedDelta(latest.value - w1.value, 'kg') : '–'} />
-      <SummaryCell label="4 Wochen" value={w4 ? signedDelta(latest.value - w4.value, 'kg') : '–'} />
+    <section className="card flex flex-col gap-3 p-4">
+      <div className="flex items-end justify-between gap-3">
+        <div className="flex flex-col">
+          <span className="text-[11px] font-medium uppercase tracking-wide text-foreground-subtle">
+            Ø 7 Tage
+          </span>
+          {current.value != null ? (
+            <>
+              <span className="stat-number text-3xl leading-tight">
+                {formatValue(round1(current.value), 'kg')}
+              </span>
+              <span className="text-xs text-foreground-subtle">aus {current.count} Einträgen</span>
+            </>
+          ) : (
+            <span className="mt-1 text-sm text-foreground-muted">{missingEntries(trend)}</span>
+          )}
+        </div>
+        <div className="flex flex-col items-end">
+          <span className="text-[11px] font-medium uppercase tracking-wide text-foreground-subtle">
+            Letzter Wert
+          </span>
+          <span className="stat-number text-lg">{formatValue(latest.value, 'kg')}</span>
+          <span className="text-xs text-foreground-subtle">{formatDate(latest.tested_at)}</span>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2 border-t border-line pt-3">
+        <SummaryCell
+          label="Zur Vorwoche"
+          value={weekDelta != null ? signedDelta(weekDelta, 'kg') : '–'}
+        />
+        <SummaryCell
+          label="Ø pro Woche (4 Wo)"
+          value={perWeek4 != null ? `${signedDelta(perWeek4, 'kg')} / Wo` : '–'}
+        />
+      </div>
+      <p className="text-[11px] leading-snug text-foreground-subtle">
+        Rollend: Ø der letzten 7 Tage vs. 7 Tage davor bzw. vor 4 Wochen. Ein Fenster zählt ab{' '}
+        {WEIGHT_WINDOW_MIN} Einträgen.
+      </p>
     </section>
   );
 }
