@@ -134,6 +134,79 @@ export function rollingWeightSeries(dailyAsc: MeasurementRow[]): (number | null)
   return dailyAsc.map((r) => windowAverage(dailyAsc, r.tested_at).value);
 }
 
+// ---- Gewicht: Kalenderwochen-Vergleich (KW, ISO 8601: Mo–So) ---------------
+
+export type WeightWeek = {
+  /** ISO-Kalenderwoche und ihr Jahr (KW 1 kann im Dezember beginnen). */
+  week: number;
+  year: number;
+  /** Montag/Sonntag der Woche als 'YYYY-MM-DD'. */
+  start: string;
+  end: string;
+  count: number;
+  /** Ø der Woche; null bei weniger als WEIGHT_WINDOW_MIN Einträgen. */
+  avg: number | null;
+  /** Ø-Veränderung zur direkt vorherigen KW (beide mit genug Einträgen). */
+  delta: number | null;
+  /** delta in % des Vorwochen-Ø (übliches Maß fürs Diät-/Aufbautempo). */
+  deltaPct: number | null;
+  /** Die laufende Woche (noch nicht abgeschlossen). */
+  current: boolean;
+};
+
+/** Montag (Tagesnummer) der ISO-Woche eines Tages. 1970-01-01 war ein Donnerstag. */
+function mondayOf(day: number): number {
+  const weekday = (((day + 3) % 7) + 7) % 7; // 0 = Montag … 6 = Sonntag
+  return day - weekday;
+}
+
+/** ISO-Kalenderwoche + Jahr zu einem Montag (Tagesnummer). Maßgeblich ist der
+ *  Donnerstag der Woche: in dessen Jahr liegt die KW. */
+function isoWeekOf(monday: number): { week: number; year: number } {
+  const thursday = new Date((monday + 3) * DAY_MS);
+  const year = thursday.getUTCFullYear();
+  const jan1 = Math.round(Date.UTC(year, 0, 1) / DAY_MS);
+  const week = Math.floor((monday + 3 - jan1) / 7) + 1;
+  return { week, year };
+}
+
+const isoOf = (day: number) => new Date(day * DAY_MS).toISOString().slice(0, 10);
+
+/** Wochen-Ø je KW, neueste zuerst – von der laufenden Woche zurück bis zur
+ *  ersten Woche mit Eintrag (Wochen ohne Eintrag erscheinen mit count = 0). */
+export function weeklyWeight(dailyAsc: MeasurementRow[], todayIso: string): WeightWeek[] {
+  if (dailyAsc.length === 0) return [];
+  const byMonday = new Map<number, number[]>();
+  for (const r of dailyAsc) {
+    const mon = mondayOf(dayNumber(r.tested_at));
+    const list = byMonday.get(mon);
+    if (list) list.push(r.value);
+    else byMonday.set(mon, [r.value]);
+  }
+  const currentMonday = mondayOf(dayNumber(todayIso));
+  const firstMonday = mondayOf(dayNumber(dailyAsc[0].tested_at));
+
+  const ascending: WeightWeek[] = [];
+  for (let mon = firstMonday; mon <= currentMonday; mon += 7) {
+    const values = byMonday.get(mon) ?? [];
+    const avg =
+      values.length >= WEIGHT_WINDOW_MIN ? values.reduce((s, v) => s + v, 0) / values.length : null;
+    const prev = ascending[ascending.length - 1];
+    const delta = avg != null && prev?.avg != null ? avg - prev.avg : null;
+    ascending.push({
+      ...isoWeekOf(mon),
+      start: isoOf(mon),
+      end: isoOf(mon + 6),
+      count: values.length,
+      avg,
+      delta,
+      deltaPct: delta != null && prev?.avg ? (delta / prev.avg) * 100 : null,
+      current: mon === currentMonday,
+    });
+  }
+  return ascending.reverse();
+}
+
 // ---- Herz: letzter Wert vs. persönlicher Normalwert -------------------------
 
 export type HeartStatus = {

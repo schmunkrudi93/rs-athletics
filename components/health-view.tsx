@@ -14,11 +14,13 @@ import {
   heartStatus,
   latestRow,
   WEIGHT_WINDOW_MIN,
+  weeklyWeight,
   weightTrend,
   type BodyFatResult,
   type HealthPage,
   type HeartStatus,
   type WeightTrend,
+  type WeightWeek,
 } from '@/lib/health';
 import type { AthleteRow, MeasurementRow, MetricRow } from '@/lib/database.types';
 
@@ -239,7 +241,12 @@ export function HealthDetail({
 
   return (
     <>
-      {page === 'weight' && <WeightSummary metric={selected} grouped={grouped} />}
+      {page === 'weight' && (
+        <>
+          <WeightSummary metric={selected} grouped={grouped} />
+          <WeeklyWeightCard metric={selected} grouped={grouped} />
+        </>
+      )}
       {page === 'circ' && (
         <>
           <BodyFatCard athlete={athlete} metrics={metrics} grouped={grouped} />
@@ -339,6 +346,111 @@ function WeightSummary({
         {WEIGHT_WINDOW_MIN} Einträgen.
       </p>
     </section>
+  );
+}
+
+/** Wochen ohne „Alle anzeigen“ – reicht für den Blick auf die letzten zwei Monate. */
+const WEEKS_COLLAPSED = 8;
+
+/** Kalenderwochen-Vergleich: Ø je KW, Veränderung zur Vorwoche in kg und %, dazu
+ *  ein Balken (links = abgenommen, rechts = zugenommen) für den Blick zurück. */
+function WeeklyWeightCard({
+  metric,
+  grouped,
+}: {
+  metric: MetricRow | null;
+  grouped: Map<string, MeasurementRow[]>;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const weeks = useMemo(
+    () => (metric ? weeklyWeight(dailyLatest(grouped.get(metric.id) ?? []), todayISO()) : []),
+    [metric, grouped],
+  );
+  if (weeks.length === 0) return null;
+  const visible = showAll ? weeks : weeks.slice(0, WEEKS_COLLAPSED);
+  // Balken relativ zur größten Wochenveränderung im sichtbaren Bereich skalieren.
+  const maxAbs = Math.max(0.1, ...visible.map((w) => Math.abs(w.delta ?? 0)));
+
+  return (
+    <section className="card flex flex-col gap-3 p-4">
+      <div>
+        <h2 className="font-display text-lg font-semibold text-foreground">Wochenvergleich</h2>
+        <p className="text-xs text-foreground-subtle">
+          Ø je Kalenderwoche (Mo–So) · Veränderung zur Vorwoche · ab {WEIGHT_WINDOW_MIN} Einträgen
+        </p>
+      </div>
+      <ul className="divide-y divide-line">
+        {visible.map((w) => (
+          <WeekRow key={`${w.year}-${w.week}`} week={w} maxAbs={maxAbs} />
+        ))}
+      </ul>
+      {weeks.length > WEEKS_COLLAPSED && (
+        <button
+          type="button"
+          onClick={() => setShowAll((v) => !v)}
+          className="self-start text-xs font-medium text-accent hover:underline"
+        >
+          {showAll ? 'Weniger anzeigen' : `Alle ${weeks.length} Wochen anzeigen`}
+        </button>
+      )}
+    </section>
+  );
+}
+
+function WeekRow({ week, maxAbs }: { week: WeightWeek; maxAbs: number }) {
+  const { avg, delta, deltaPct, count } = week;
+  const short = (iso: string) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}.`;
+  const widthPct = delta != null ? (Math.abs(delta) / maxAbs) * 50 : 0;
+  return (
+    <li className={clsx('flex flex-col gap-1.5 py-2.5', avg == null && !week.current && 'opacity-60')}>
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="flex items-baseline gap-2">
+          <span className="text-sm font-semibold text-foreground">KW {week.week}</span>
+          <span className="text-xs text-foreground-subtle">
+            {short(week.start)}–{short(week.end)}
+          </span>
+          {week.current && (
+            <span className="rounded-md bg-accent-soft px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
+              läuft
+            </span>
+          )}
+        </span>
+        <span className="stat-number text-base">
+          {avg != null ? formatValue(round1(avg), 'kg') : '–'}
+        </span>
+      </div>
+      <div className="flex items-center justify-between gap-3 text-xs">
+        <span className="text-foreground-subtle">
+          {avg == null
+            ? week.current
+              ? `Bisher ${count} ${count === 1 ? 'Eintrag' : 'Einträge'}`
+              : count === 0
+                ? 'Keine Einträge'
+                : `Zu wenig Einträge (${count}/${WEIGHT_WINDOW_MIN})`
+            : `${count} Einträge`}
+        </span>
+        <span className="stat-number font-semibold text-foreground">
+          {delta != null && deltaPct != null
+            ? `${signedDelta(delta, 'kg')} · ${formatPercentDelta(deltaPct)}`
+            : ''}
+        </span>
+      </div>
+      {/* Balken: Mitte = unverändert, links = ab, rechts = zu. */}
+      {delta != null && (
+        <div className="relative h-1.5 w-full rounded-full bg-surface-muted">
+          <span className="absolute inset-y-0 left-1/2 w-px bg-line" aria-hidden="true" />
+          <span
+            className="absolute inset-y-0 rounded-full bg-accent"
+            style={
+              delta < 0
+                ? { right: '50%', width: `${widthPct}%` }
+                : { left: '50%', width: `${widthPct}%` }
+            }
+            aria-hidden="true"
+          />
+        </div>
+      )}
+    </li>
   );
 }
 
