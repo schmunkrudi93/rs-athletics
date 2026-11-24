@@ -1,13 +1,21 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Logo } from '@/components/logo';
 import { Button } from '@/components/ui/button';
 import { logout } from '@/lib/auth-client';
 
-/** Kopfzeile mit Logo und „Abmelden / Athlet wechseln". */
-export function TopBar({ children }: { children?: React.ReactNode }) {
+/** Kopfzeile mit Logo, Tempo-Timer-Link und „Abmelden / Athlet wechseln". */
+export function TopBar({
+  children,
+  showTempoLink = true,
+}: {
+  children?: React.ReactNode;
+  /** Link zum Tempo-Timer (auf der Timer-Seite selbst ausgeblendet). */
+  showTempoLink?: boolean;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
 
@@ -27,6 +35,14 @@ export function TopBar({ children }: { children?: React.ReactNode }) {
         <Logo variant="horizontal" height={24} />
         <div className="flex items-center gap-2">
           {children}
+          {showTempoLink && (
+            <Link
+              href="/tempo"
+              className="inline-flex h-9 items-center rounded-xl border border-line bg-surface px-3 text-sm font-medium text-foreground transition hover:border-accent/50"
+            >
+              Tempo
+            </Link>
+          )}
           <Button variant="outline" size="sm" onClick={onLogout} disabled={busy}>
             Abmelden
           </Button>
